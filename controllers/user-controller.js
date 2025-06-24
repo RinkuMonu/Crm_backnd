@@ -61,7 +61,7 @@ class UserController {
     
         const username = 'user' + crypto.randomInt(11111111, 999999999);
     
-        if (!name || !email || !mobile || !password || !type || !status || !current_address ||!Esi_no ||!Un_no || !permanent_address || !desgination || 
+        if (!name || !email || !mobile || !password || !type || !status || !current_address || !permanent_address || !desgination || 
           !account_number || !ifsc || !bank_name || !branch || !father_name || !mother_name || !alternate_number || !DOB || !DOJ || !experience 
           || !nominee_name || !nominee_relation || !nominee_mobile || !nominee_address || !nominee_age)
             return next(ErrorHandler.badRequest('All Fields Required'));
