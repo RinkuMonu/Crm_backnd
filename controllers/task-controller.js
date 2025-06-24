@@ -1,21 +1,36 @@
-const mongoose = require('mongoose');
-const Task = require('../models/task_models');
-const Lead = require('../models/Lead-modal');
-const User = require('../models/user-model');
-const Deal = require('../models/Deals');
-const Meeting = require('../models/Meeting');
-const xlsx = require('xlsx');
-const Event = require('../models/Events');
-
+const mongoose = require("mongoose");
+const Task = require("../models/task_models");
+const Lead = require("../models/Lead-modal");
+const User = require("../models/user-model");
+const Deal = require("../models/Deals");
+const Meeting = require("../models/Meeting");
+const xlsx = require("xlsx");
+const Event = require("../models/Events");
 
 exports.createTaskWithLeads = async (req, res, next) => {
   try {
-    const { title, priority, Status, description, team, createdFor, assignedTo, createdBy } = req.body;
+    const {
+      title,
+      priority,
+      Status,
+      description,
+      team,
+      createdFor,
+      assignedTo,
+      createdBy,
+    } = req.body;
     const assignedBy = createdBy;
 
-
     // 1. Create Task
-    const task = await Task.create({ title, priority, description, team, assignedTo, Status, assignedBy });
+    const task = await Task.create({
+      title,
+      priority,
+      description,
+      team,
+      assignedTo,
+      Status,
+      assignedBy,
+    });
 
     // 2. Check if the file is provided
     if (req.file && req.file.buffer) {
@@ -27,24 +42,35 @@ exports.createTaskWithLeads = async (req, res, next) => {
       const data = xlsx.utils.sheet_to_json(sheet);
 
       // Prepare leads
-      const allLeads = data.map(row => ({
+      const allLeads = data.map((row) => ({
         name: row.NAME,
         Contact_No: String(row.CONTACT),
         address: row.ADDRESS,
         District: row.DISTRICT,
         State: row.STATE,
-        result: ['Pass', 'Fail'].includes(row.RESULT) ? row.RESULT : 'Pending',
-        interest: ['High', 'Medium', 'Low'].includes(row.INTEREST) ? row.INTEREST : 'Medium',
-        taskID: task._id
+        result: ["Pass", "Fail"].includes(row.RESULT) ? row.RESULT : "Pending",
+        interest: ["High", "Medium", "Low"].includes(row.INTEREST)
+          ? row.INTEREST
+          : "Medium",
+        taskID: task._id,
       }));
 
       // Check duplicates by Contact_No
-      const contactNos = allLeads.map(lead => lead.Contact_No);
-      const existingLeads = await Lead.find({ Contact_No: { $in: contactNos }, taskID: task._id });
+      const contactNos = allLeads.map((lead) => lead.Contact_No);
+      const existingLeads = await Lead.find({
+        Contact_No: { $in: contactNos },
+        taskID: task._id,
+      });
 
-      const existingContactsSet = new Set(existingLeads.map(lead => lead.Contact_No));
-      const nonDuplicateLeads = allLeads.filter(lead => !existingContactsSet.has(lead.Contact_No));
-      const duplicateLeads = allLeads.filter(lead => existingContactsSet.has(lead.Contact_No));
+      const existingContactsSet = new Set(
+        existingLeads.map((lead) => lead.Contact_No)
+      );
+      const nonDuplicateLeads = allLeads.filter(
+        (lead) => !existingContactsSet.has(lead.Contact_No)
+      );
+      const duplicateLeads = allLeads.filter((lead) =>
+        existingContactsSet.has(lead.Contact_No)
+      );
 
       // Insert non-duplicates
       await Lead.insertMany(nonDuplicateLeads);
@@ -53,23 +79,21 @@ exports.createTaskWithLeads = async (req, res, next) => {
         success: true,
         message: "Task created. Non-duplicate leads added.",
         task,
-        duplicateLeads // Send duplicates back to frontend
+        duplicateLeads, // Send duplicates back to frontend
       });
     } else {
       // If no file is provided, just send success response without leads
       res.json({
         success: true,
         message: "Task created. No file provided, so no leads added.",
-        task
+        task,
       });
     }
-
   } catch (error) {
     console.error("❌ Error:", error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
-
 
 // Controller
 exports.getTodayTasks = async (req, res, next) => {
@@ -112,7 +136,7 @@ exports.getTodayTasks = async (req, res, next) => {
     const tasks = await Task.find({
       assignedTo: employeeID,
       createdAt: { $gte: startDate, $lte: endDate },
-    });
+    }).populate("assignedBy");
 
     console.log("✅ Tasks found:", tasks.length);
     if (tasks.length === 0) {
@@ -144,18 +168,17 @@ exports.getLeadsByTaskId = async (req, res) => {
   const { id } = req.params;
 
   if (!mongoose.Types.ObjectId.isValid(id)) {
-    return res.status(400).json({ message: 'Invalid taskId' });
+    return res.status(400).json({ message: "Invalid taskId" });
   }
 
   try {
-    const leads = await Lead.find({ taskID: id }).populate('taskID');
+    const leads = await Lead.find({ taskID: id }).populate("taskID");
     res.status(200).json(leads);
   } catch (error) {
-    console.error('Error fetching leads by taskId:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    console.error("Error fetching leads by taskId:", error);
+    res.status(500).json({ message: "Internal server error" });
   }
 };
-
 
 exports.updateLead = async (req, res) => {
   try {
@@ -165,7 +188,9 @@ exports.updateLead = async (req, res) => {
 
     if (!leadID) {
       console.log("❌ Missing leadID");
-      return res.status(400).json({ success: false, message: "leadID is required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "leadID is required" });
     }
 
     console.log("🔍 Finding and Updating Lead ID:", leadID);
@@ -178,14 +203,16 @@ exports.updateLead = async (req, res) => {
         interest,
         reminder,
         updatedBy: req.user?._id || "test-user-id",
-        updatedAt: new Date()
+        updatedAt: new Date(),
       },
       { new: true }
     );
 
     if (!updated) {
       console.log("❌ Lead not found for ID:", leadID);
-      return res.status(404).json({ success: false, message: "Lead not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Lead not found" });
     }
 
     console.log("✅ Lead Updated Successfully:", updated);
@@ -200,7 +227,6 @@ exports.updateLead = async (req, res) => {
 // Controller
 exports.updateTaskStatusAndRemark = async (req, res, next) => {
   try {
-
     const { Status, remark, taskId } = req.body;
 
     console.log("🛠️ Updating Task:", taskId);
@@ -214,7 +240,9 @@ exports.updateTaskStatusAndRemark = async (req, res, next) => {
     );
 
     if (!updatedTask) {
-      return res.status(404).json({ success: false, message: "Task not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Task not found" });
     }
 
     console.log("✅ Task Updated:", updatedTask);
@@ -222,16 +250,13 @@ exports.updateTaskStatusAndRemark = async (req, res, next) => {
     res.json({
       success: true,
       message: "Task updated successfully",
-      data: updatedTask
+      data: updatedTask,
     });
-
   } catch (error) {
     console.error("❌ Error in updateTaskStatusAndRemark:", error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
-
-
 
 exports.createDealFromLead = async (req, res) => {
   try {
@@ -240,7 +265,7 @@ exports.createDealFromLead = async (req, res) => {
     if (!leadID || !assigned_leader) {
       return res.status(400).json({
         success: false,
-        message: "leadID and assigned_leader are required"
+        message: "leadID and assigned_leader are required",
       });
     }
 
@@ -249,7 +274,7 @@ exports.createDealFromLead = async (req, res) => {
     if (!lead) {
       return res.status(404).json({
         success: false,
-        message: "Lead not found"
+        message: "Lead not found",
       });
     }
 
@@ -261,7 +286,7 @@ exports.createDealFromLead = async (req, res) => {
       value,
       assigned_leader,
       reminder,
-      created_by: req.user?._id || "test-user-id"
+      created_by: req.user?._id || "test-user-id",
     });
 
     await newDeal.save();
@@ -273,13 +298,13 @@ exports.createDealFromLead = async (req, res) => {
     res.status(201).json({
       success: true,
       message: "Deal created and Lead marked as Assigned",
-      data: newDeal
+      data: newDeal,
     });
   } catch (error) {
     console.error("🔥 Error in creating deal:", error);
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 };
@@ -294,9 +319,7 @@ exports.getDealsByLeader = async (req, res) => {
       .populate("lead")
       .populate("assigned_employee", "name email profilePic");
 
-
     res.status(200).json({ success: true, data: deals });
-
   } catch (error) {
     console.error("🔥 Error Fetching Deals:", error);
     res.status(500).json({ success: false, error: error.message });
@@ -309,7 +332,10 @@ exports.assignEmployeeToDeal = async (req, res) => {
     const { dealID, assigned_employee, deadline } = req.body;
 
     if (!dealID || !assigned_employee || !deadline) {
-      return res.status(400).json({ success: false, message: "dealID and assigned_employee are required" });
+      return res.status(400).json({
+        success: false,
+        message: "dealID and assigned_employee are required",
+      });
     }
 
     const updatedDeal = await Deal.findByIdAndUpdate(
@@ -319,16 +345,22 @@ exports.assignEmployeeToDeal = async (req, res) => {
     );
 
     if (!updatedDeal) {
-      return res.status(404).json({ success: false, message: "Deal not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Deal not found" });
     }
 
-    res.json({ success: true, message: "Employee assigned to deal", data: updatedDeal });
+    res.json({
+      success: true,
+      message: "Employee assigned to deal",
+      data: updatedDeal,
+    });
   } catch (error) {
     console.error("🔥 Error in assigning employee:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
-// employe dealssss  
+// employe dealssss
 // getMyDeals.js
 
 exports.getMyDeals = async (req, res) => {
@@ -339,7 +371,9 @@ exports.getMyDeals = async (req, res) => {
     // Validate ObjectId
     const isValidObjectId = mongoose.Types.ObjectId.isValid(id);
     if (!isValidObjectId) {
-      return res.status(400).json({ success: false, message: "Invalid employee ID" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid employee ID" });
     }
 
     const employeeObjectId = mongoose.Types.ObjectId(id);
@@ -353,14 +387,14 @@ exports.getMyDeals = async (req, res) => {
     if (startDate && endDate) {
       query.createdAt = {
         $gte: new Date(`${startDate}T00:00:00`),
-        $lte: new Date(`${endDate}T23:59:59`)
+        $lte: new Date(`${endDate}T23:59:59`),
       };
     }
 
     // Query database
     const deals = await Deal.find(query)
-      .populate('lead')
-      .populate('assigned_leader', 'name')
+      .populate("lead")
+      .populate("assigned_leader", "name")
       .sort({ updatedAt: -1 });
 
     console.log("📊 Total deals found:", deals.length);
@@ -368,12 +402,15 @@ exports.getMyDeals = async (req, res) => {
     if (deals.length === 0) {
       console.warn("⚠️ No deals found for this employee");
     } else {
-      console.log("✅ Deals fetched successfully. First deal sample:", deals[0]);
+      console.log(
+        "✅ Deals fetched successfully. First deal sample:",
+        deals[0]
+      );
     }
 
     res.json({ success: true, data: deals });
   } catch (err) {
-    console.error('🔥 Error in getMyDeals:', err);
+    console.error("🔥 Error in getMyDeals:", err);
     res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -385,12 +422,23 @@ exports.updateDealStage = async (req, res) => {
     const { dealId, newStage } = req.body;
 
     if (!dealId || !newStage) {
-      return res.status(400).json({ success: false, message: 'Deal ID and new stage are required' });
+      return res.status(400).json({
+        success: false,
+        message: "Deal ID and new stage are required",
+      });
     }
 
-    const allowedStages = ['untouched', 'next_meeting', 'quotation', 'won', 'Loss'];
+    const allowedStages = [
+      "untouched",
+      "next_meeting",
+      "quotation",
+      "won",
+      "Loss",
+    ];
     if (!allowedStages.includes(newStage)) {
-      return res.status(400).json({ success: false, message: 'Invalid stage value' });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid stage value" });
     }
 
     const updated = await Deal.findByIdAndUpdate(
@@ -400,7 +448,9 @@ exports.updateDealStage = async (req, res) => {
     );
 
     if (!updated) {
-      return res.status(404).json({ success: false, message: 'Deal not found' });
+      return res
+        .status(404)
+        .json({ success: false, message: "Deal not found" });
     }
 
     res.json({ success: true, data: updated });
@@ -411,21 +461,26 @@ exports.updateDealStage = async (req, res) => {
 
 exports.getSalesLeaders = async (req, res) => {
   try {
-    const salesLeaders = await User.find({ type: 'leader' }).select('_id name email');
+    const salesLeaders = await User.find({ type: "leader" }).select(
+      "_id name email"
+    );
     res.status(200).json({ success: true, data: salesLeaders });
   } catch (error) {
-    console.error('❌ Error fetching sales leaders:', error);
+    console.error("❌ Error fetching sales leaders:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
-// for sales leader 
+// for sales leader
 exports.getEmployee = async (req, res) => {
   try {
     const { type } = req.query;
-    const salesLeaders = await User.find({ type: 'employee', branch: type == 'employee' && { $in: ['tech', 'telecaller'] } }).select('_id name email');
+    const salesLeaders = await User.find({
+      type: "employee",
+      branch: type == "employee" && { $in: ["tech", "telecaller"] },
+    }).select("_id name email");
     res.status(200).json({ success: true, data: salesLeaders });
   } catch (error) {
-    console.error('❌ Error fetching sales leaders:', error);
+    console.error("❌ Error fetching sales leaders:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -439,10 +494,29 @@ exports.getTodayMeetingsByEmployee = async (req, res) => {
     const today = new Date();
 
     // Set the start of the day (00:00:00) in UTC for today's date
-    const startOfDay = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate(), 0, 0, 0));
+    const startOfDay = new Date(
+      Date.UTC(
+        today.getUTCFullYear(),
+        today.getUTCMonth(),
+        today.getUTCDate(),
+        0,
+        0,
+        0
+      )
+    );
 
     // Set the end of the day (23:59:59.999) in UTC for today's date
-    const endOfDay = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate(), 23, 59, 59, 999));
+    const endOfDay = new Date(
+      Date.UTC(
+        today.getUTCFullYear(),
+        today.getUTCMonth(),
+        today.getUTCDate(),
+        23,
+        59,
+        59,
+        999
+      )
+    );
 
     console.log("Start of Day (UTC):", startOfDay);
     console.log("End of Day (UTC):", endOfDay);
@@ -451,10 +525,10 @@ exports.getTodayMeetingsByEmployee = async (req, res) => {
     const meetings = await Meeting.find({
       employeeId: mongoose.Types.ObjectId(id), // Ensure correct field name (`employeeId`)
       startDate: {
-        $gte: startOfDay.toISOString(),  // Start of the day in ISO format
-        $lte: endOfDay.toISOString()    // End of the day in ISO format
-      }
-    }).populate('dealId'); // Optionally populate related deal data if needed
+        $gte: startOfDay.toISOString(), // Start of the day in ISO format
+        $lte: endOfDay.toISOString(), // End of the day in ISO format
+      },
+    }).populate("dealId"); // Optionally populate related deal data if needed
 
     console.log("Meetings Found:", meetings);
 
@@ -466,28 +540,49 @@ exports.getTodayMeetingsByEmployee = async (req, res) => {
   }
 };
 
-
-
-
-
 // Controller to create a new meeting
 // Controller to create a new meeting
 exports.createMeeting = async (req, res) => {
   try {
     // Extract meeting details from the request body
-    const { title, venue, location, startDate, startTime, endDate, endTime, dealId, employeeID } = req.body;
+    const {
+      title,
+      venue,
+      location,
+      startDate,
+      startTime,
+      endDate,
+      endTime,
+      dealId,
+      employeeID,
+    } = req.body;
 
     // Log the received data to debug
     console.log("Received meeting data:", req.body);
 
     // Validate the incoming data
-    if (!title || !venue || !location || !startDate || !startTime || !endDate || !endTime || !dealId || !employeeID) {
-      return res.status(400).json({ success: false, message: "Please provide all required fields." });
+    if (
+      !title ||
+      !venue ||
+      !location ||
+      !startDate ||
+      !startTime ||
+      !endDate ||
+      !endTime ||
+      !dealId ||
+      !employeeID
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide all required fields.",
+      });
     }
 
     // Validate the start and end dates
     if (isNaN(new Date(startDate)) || isNaN(new Date(endDate))) {
-      return res.status(400).json({ success: false, message: "Invalid start or end date." });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid start or end date." });
     }
 
     // Create a new meeting object
@@ -528,11 +623,16 @@ exports.createEvent = async (req, res) => {
 
     // Validate the incoming data
     if (!title || !type || !date || !time || !location || !description) {
-      return res.status(400).json({ success: false, message: "Please provide all required fields." });
+      return res.status(400).json({
+        success: false,
+        message: "Please provide all required fields.",
+      });
     }
 
     // If an image is uploaded, get the image file path
-    const image = req.file ? `/storage/events/${req.file.filename}` : null; // Check if the image exists in the request
+    const image = req.file
+      ? `${process.env.BASE_URL}storage/events/${req.file.filename}`
+      : null; // Check if the image exists in the request
 
     // Create a new event object
     const newEvent = new Event({
@@ -542,7 +642,7 @@ exports.createEvent = async (req, res) => {
       time,
       location,
       description,
-      image,  // Add the image URL (if image exists)
+      image, // Add the image URL (if image exists)
     });
 
     // Save the event to the database
@@ -566,14 +666,20 @@ exports.getEventsByDate = async (req, res) => {
     // Ensure the date format is valid
     const validDate = new Date(date);
     if (isNaN(validDate)) {
-      return res.status(400).json({ success: false, message: "Invalid date format." });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid date format." });
     }
 
     // Fetch events on the specific date
-    const events = await Event.find({ date: validDate.toISOString().split('T')[0] }); // Match the date without time part
+    const events = await Event.find({
+      date: validDate.toISOString().split("T")[0],
+    }); // Match the date without time part
 
     if (events.length === 0) {
-      return res.status(404).json({ success: false, message: "No events found for this date." });
+      return res
+        .status(404)
+        .json({ success: false, message: "No events found for this date." });
     }
 
     res.status(200).json({
@@ -586,7 +692,6 @@ exports.getEventsByDate = async (req, res) => {
   }
 };
 
-
 exports.getFilteredDeals = async (req, res) => {
   try {
     const { assigned_leader, assigned_employee, status } = req.query;
@@ -597,29 +702,37 @@ exports.getFilteredDeals = async (req, res) => {
       query.assigned_leader = new mongoose.Types.ObjectId(assigned_leader);
     }
 
-    if (assigned_employee && mongoose.Types.ObjectId.isValid(assigned_employee)) {
+    if (
+      assigned_employee &&
+      mongoose.Types.ObjectId.isValid(assigned_employee)
+    ) {
       query.assigned_employee = new mongoose.Types.ObjectId(assigned_employee);
     }
-    const validStatuses = ['untouched', 'next_meeting', 'quotation', 'won', 'Loss'];
+    const validStatuses = [
+      "untouched",
+      "next_meeting",
+      "quotation",
+      "won",
+      "Loss",
+    ];
     if (status && validStatuses.includes(status)) {
       query.status = status;
     } else if (!status) {
-      query.status = 'won';
+      query.status = "won";
     }
     query.createdAt = {
       $gte: new Date(new Date() - 30 * 24 * 60 * 60 * 1000), // Last 30 days
     };
 
     const deals = await Deal.find(query)
-      .populate('lead')
-      .populate('assigned_leader', 'name email')
-      .populate('assigned_employee', 'name email')
+      .populate("lead")
+      .populate("assigned_leader", "name email")
+      .populate("assigned_employee", "name email")
       .sort({ createdAt: -1 });
 
     res.json({ success: true, data: deals });
   } catch (err) {
-    console.error('🔥 Error fetching filtered deals:', err);
-    res.status(500).json({ success: false, message: 'Server error' });
+    console.error("🔥 Error fetching filtered deals:", err);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 };
-

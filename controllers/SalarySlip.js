@@ -473,7 +473,7 @@ exports.salarySlip = async (req, res) => {
     res.status(200).json({
       success: true,
       message: 'Salary slip generated and emailed.',
-      file: `/storage/${fileName}` // This should be served as static route
+      file: `${process.env.BASE_URL}storage/${fileName}` // This should be served as static route
     });
 
   } catch (error) {

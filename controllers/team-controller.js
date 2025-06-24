@@ -23,7 +23,10 @@ class TeamController {
     }
 
     updateTeam = async (req,res,next) =>
+        
     {
+        console.log(req);
+        
         const {id} = req.params;
         if(!id) return next(ErrorHandler.badRequest('Team Id Is Missing'));
         if(!mongoose.Types.ObjectId.isValid(id)) return next(ErrorHandler.badRequest('Invalid Team Id'));
