@@ -398,8 +398,8 @@ class UserController {
       "Saturday",
     ];
     try {
-      const { employeeID } = req.body;
-      const now = new Date();
+      const { employeeID, date } = req.body;
+      const now = new Date(date);
 
       const holidayCheck = attendanceService.isHoliday(now);
       if (holidayCheck.isHoliday) {
@@ -415,6 +415,7 @@ class UserController {
         date: now.getDate(),
         day: days[now.getDay()],
       };
+      // return null;
 
       const existing = await attendanceService.findAttendance(attendanceData);
       if (existing && existing.inTime) {
@@ -446,8 +447,8 @@ class UserController {
 
   markOutAttendance = async (req, res, next) => {
     try {
-      const { employeeID } = req.body;
-      const now = new Date();
+      const { employeeID, date } = req.body;
+      const now = new Date(date);
 
       const query = {
         employeeID,
@@ -562,16 +563,26 @@ class UserController {
 
   getAllTodayInRequests = async (req, res, next) => {
     try {
-      // const today = new Date();
+      const now = new Date(req.query.date);
+      // console.log(req);
 
-      const filter = {
-        year: req.query.year,
-        month: req.query.month,
-        date: req.query.date,
+      // const filter = {
+      //   year: req.query.year,
+      //   month: req.query.month,
+      //   date: req.query.date,
+      //   inApproved: false,
+      // };
+      const query = {
+        year: now.getFullYear(),
+        month: now.getMonth() + 1,
+        date: now.getDate(),
         inApproved: false,
       };
 
-      const resp = await attendanceService.findAllAttendance(filter);
+      console.log(query);
+      
+
+      const resp = await attendanceService.findAllAttendance(query);
       if (!resp)
         return next(ErrorHandler.notFound("No IN Requests found for today"));
       const sortedResp = resp.sort(
