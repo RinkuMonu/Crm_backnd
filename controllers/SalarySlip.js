@@ -1,17 +1,15 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const path = require('path');
-const fs = require('fs');
-const puppeteer = require('puppeteer');
-const moment =require("moment")
+const path = require("path");
+const fs = require("fs");
+const puppeteer = require("puppeteer");
+const moment = require("moment");
 
-const User = require('../models/user-model');
-const UserSalary = require('../models/user-salary');
-const Attendance = require('../models/attendance-model');
-const Leave = require('../models/leave-model');
-const nodeMailer = require('nodemailer');
-
-
+const User = require("../models/user-model");
+const UserSalary = require("../models/user-salary");
+const Attendance = require("../models/attendance-model");
+const Leave = require("../models/leave-model");
+const nodeMailer = require("nodemailer");
 
 // exports.salarySlip = async (req, res) => {
 //     const { employeeID, month, year } = req.body;
@@ -178,7 +176,7 @@ const nodeMailer = require('nodemailer');
 //             </head>
 //             <body>
 //                 <div class="section-title">Payslip For: ${data.month} ${data.year}</div>
-        
+
 //                 <table>
 //                     <tr><td><strong>Employee Name</strong></td><td>${data.naam}</td></tr>
 //                     <tr><td><strong>Designation</strong></td><td>${data.post}</td></tr>
@@ -188,12 +186,12 @@ const nodeMailer = require('nodemailer');
 //                     <tr><td><strong>IFSC Code</strong></td><td>${data.IFSC}</td></tr>
 //                     <tr><td><strong>Total Days In Month</strong></td><td>${data.totalDays}</td></tr>
 //                 </table>
-        
+
 //                 <div class="section-title">Leave Balance</div>
 //                 <table>
 //                     <tr><td><strong>Remaining Leave Balance</strong></td><td>₹${data.leaveBalance}</td></tr>
 //                 </table>
-        
+
 //                 <div class="section-title">Earnings</div>
 //                 <table>
 //                     <tr><th>Component</th><th>Amount (₹)</th></tr>
@@ -201,7 +199,7 @@ const nodeMailer = require('nodemailer');
 //                     <tr><td>Bonus</td><td>₹${data.bonus}</td></tr>
 //                     <tr><td>Earned Salary</td><td>₹${data.earnedSalary}</td></tr>
 //                 </table>
-        
+
 //                 <div class="section-title">Deductions</div>
 //                 <table>
 //                     <tr><th>Component</th><th>Amount (₹)</th></tr>
@@ -212,14 +210,14 @@ const nodeMailer = require('nodemailer');
 //                     <tr><td>ESI (Employee)</td><td>₹${data.esiEmployee}</td></tr>
 //                     <tr class="highlight"><td>Total Deductions</td><td>₹${data.totalDeductions}</td></tr>
 //                 </table>
-        
+
 //                 <div class="section-title">Employer Contributions</div>
 //                 <table>
 //                     <tr><th>Component</th><th>Amount (₹)</th></tr>
 //                     <tr><td>PF (Company)</td><td>₹${data.pfCompany}</td></tr>
 //                     <tr><td>ESI (Company)</td><td>₹${data.esiCompany}</td></tr>
 //                 </table>
-        
+
 //                 <div class="net-pay">NET PAYABLE: ₹${data.netSalary}</div>
 //             </body>
 //         </html>
@@ -258,10 +256,6 @@ const nodeMailer = require('nodemailer');
 
 // Birthday & Anniversary Quotes
 
-
-
-
-
 exports.salarySlip = async (req, res) => {
   const {
     employeeID,
@@ -278,7 +272,7 @@ exports.salarySlip = async (req, res) => {
     companyPf,
     companyEsi,
     totalDeduction,
-    netPay
+    netPay,
   } = req.body;
 
   try {
@@ -286,7 +280,9 @@ exports.salarySlip = async (req, res) => {
     const salary = await UserSalary.findOne({ employeeID });
 
     if (!user || !salary) {
-      return res.status(404).json({ success: false, message: "Employee data not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Employee data not found" });
     }
 
     const leaveBalance = salary.leaveBalance || 0;
@@ -294,10 +290,13 @@ exports.salarySlip = async (req, res) => {
     const perDay = grossSalary / totalDays;
 
     // Load Letterhead Image
-    const letterheadImage = 'L.png';
-    const imagePath = path.resolve(__dirname, `../storage/later-head/${letterheadImage}`);
+    const letterheadImage = "L.png";
+    const imagePath = path.resolve(
+      __dirname,
+      `../storage/later-head/${letterheadImage}`
+    );
     const imageBuffer = fs.readFileSync(imagePath);
-    const imageBase64 = imageBuffer.toString('base64');
+    const imageBase64 = imageBuffer.toString("base64");
     const imageSrc = `data:image/png;base64,${imageBase64}`;
 
     // Prepare Salary Data
@@ -326,7 +325,7 @@ exports.salarySlip = async (req, res) => {
       leaveBalance: leaveBalance.toFixed(2),
       perDay: perDay.toFixed(2),
       totalSalary: grossSalary,
-      totalDeductions: totalDeduction
+      totalDeductions: totalDeduction,
     };
 
     // Build HTML
@@ -385,12 +384,16 @@ exports.salarySlip = async (req, res) => {
     <tr><td><strong>Bank Account No.</strong></td><td>${data.acc}</td></tr>
     <tr><td><strong>Bank Name</strong></td><td>${data.bank}</td></tr>
     <tr><td><strong>IFSC Code</strong></td><td>${data.IFSC}</td></tr>
-    <tr><td><strong>Total Days In Month</strong></td><td>${data.totalDays}</td></tr>
+    <tr><td><strong>Total Days In Month</strong></td><td>${
+      data.totalDays
+    }</td></tr>
   </table>
 
   <div class="section-title">Leave Balance</div>
   <table>
-    <tr><td><strong>Remaining Leave Balance</strong></td><td>₹${data.leaveBalance}</td></tr>
+    <tr><td><strong>Remaining Leave Balance</strong></td><td>₹${
+      data.leaveBalance
+    }</td></tr>
   </table>
 
   <div class="section-title">Earnings</div>
@@ -404,12 +407,22 @@ exports.salarySlip = async (req, res) => {
   <div class="section-title">Deductions</div>
   <table>
     <tr><th>Component</th><th>Amount (₹)</th></tr>
-    <tr><td>Full Days Present (${data.presentDays})</td><td>₹${(data.presentDays * data.perDay).toFixed(2)}</td></tr>
-    <tr><td>Half Day Deductions (${data.halfDays})</td><td>₹${(data.halfDays * data.perDay * 0.5).toFixed(2)}</td></tr>
-    <tr><td>Leave Deductions (${data.absentDays})</td><td>₹${data.leaveDeduction}</td></tr>
+    <tr><td>Full Days Present (${data.presentDays})</td><td>₹${(
+      data.presentDays * data.perDay
+    ).toFixed(2)}</td></tr>
+    <tr><td>Half Day Deductions (${data.halfDays})</td><td>₹${(
+      data.halfDays *
+      data.perDay *
+      0.5
+    ).toFixed(2)}</td></tr>
+    <tr><td>Leave Deductions (${data.absentDays})</td><td>₹${
+      data.leaveDeduction
+    }</td></tr>
     <tr><td>PF (Employee)</td><td>₹${data.pfEmployee}</td></tr>
     <tr><td>ESI (Employee)</td><td>₹${data.esiEmployee}</td></tr>
-    <tr class="highlight"><td>Total Deductions</td><td>₹${data.totalDeductions}</td></tr>
+    <tr class="highlight"><td>Total Deductions</td><td>₹${
+      data.totalDeductions
+    }</td></tr>
   </table>
 
   <div class="section-title">Employer Contributions</div>
@@ -426,31 +439,30 @@ exports.salarySlip = async (req, res) => {
     // Generate PDF
     const browser = await puppeteer.launch();
     const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0' });
+    await page.setContent(html, { waitUntil: "networkidle0" });
 
     const fileName = `salary-slip-${employeeID}-${month}-${year}.pdf`;
-    const filePath = path.join(__dirname, '..', 'storage', fileName);
+    const filePath = path.join(__dirname, "..", "storage", fileName);
 
     await page.pdf({
       path: filePath,
-      format: 'A4',
-      printBackground: true
+      format: "A4",
+      printBackground: true,
     });
 
     await browser.close();
 
     // Send Email
-    const transporter = nodeMailer
-    .createTransport({
-      service: 'gmail',
+    const transporter = nodeMailer.createTransport({
+      service: "gmail",
       auth: {
-        user: 'hr@7unique.in',
-        pass: 'zfes rsbk pzwg ozxe', // 🔐 Use process.env.EMAIL_PASS in real usage
+        user: "hr@7unique.in",
+        pass: "zfes rsbk pzwg ozxe", // 🔐 Use process.env.EMAIL_PASS in real usage
       },
     });
 
     const mailOptions = {
-      from: 'hr@7unique.in',
+      from: "hr@7unique.in",
       to: user.email,
       subject: `Salary Slip for ${month} ${year}`,
       text: `Dear ${user.name},\n\nPlease find attached your salary slip for ${month} ${year}.`,
@@ -464,81 +476,83 @@ exports.salarySlip = async (req, res) => {
 
     transporter.sendMail(mailOptions, (err, info) => {
       if (err) {
-        console.error('❌ Failed to send email:', err);
+        console.error("❌ Failed to send email:", err);
       } else {
-        console.log('✅ Email sent:', info.response);
+        console.log("✅ Email sent:", info.response);
       }
     });
 
     res.status(200).json({
       success: true,
-      message: 'Salary slip generated and emailed.',
-      file: `${process.env.BASE_URL}storage/${fileName}` // This should be served as static route
+      message: "Salary slip generated and emailed.",
+      file: `${process.env.BASE_URL}storage/${fileName}`, // This should be served as static route
     });
-
   } catch (error) {
     console.error("❌ Salary slip generation failed:", error);
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
 
-
-const birthdayQuote = "Wishing you a day filled with happiness and a year filled with joy. Happy Birthday!";
-const anniversaryQuote = "Wishing you continued success and happiness on your work anniversary!";
+const birthdayQuote =
+  "Wishing you a day filled with happiness and a year filled with joy. Happy Birthday!";
+const anniversaryQuote =
+  "Wishing you continued success and happiness on your work anniversary!";
 
 // Get users who have birthday or anniversary today
 exports.getTodayEvents = async (req, res) => {
-    const today = new Date();
-    const todayMonthDay = `${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-  
-    const formatMonthDay = (dateStr) => {
-      const date = new Date(dateStr);
-      if (isNaN(date)) return null;
-      const mm = String(date.getMonth() + 1).padStart(2, '0');
-      const dd = String(date.getDate()).padStart(2, '0');
-      return `${mm}-${dd}`;
-    };
-  
-    try {
-      const users = await User.find({});
-  
-      const events = users.reduce((acc, user) => {
-        const dob = user.DOB ? formatMonthDay(user.DOB) : null;
-        const doj = user.DOJ ? formatMonthDay(user.DOJ) : null;
-  
-        if (dob === todayMonthDay) {
-          acc.push({
-            type: 'birthday',
-            name: user.name,
-            image: user.image,
-            dob: user.DOB,
-            quote: birthdayQuote
-          });
-        }
-  
-        if (doj === todayMonthDay) {
-          acc.push({
-            type: 'anniversary',
-            name: user.name,
-            image: user.image,
-            doj: user.DOJ,
-            quote: anniversaryQuote
-          });
-        }
-  
-        return acc;
-      }, []);
-  
-      res.status(200).json({
-        message: 'Events fetched successfully',
-        data: events
-      });
-    } catch (error) {
-      console.error('Error fetching today’s events:', error);
-      res.status(500).json({ message: 'Internal server error' });
-    }
+  const today = new Date();
+  const todayMonthDay = `${String(today.getMonth() + 1).padStart(
+    2,
+    "0"
+  )}-${String(today.getDate()).padStart(2, "0")}`;
+
+  const formatMonthDay = (dateStr) => {
+    const date = new Date(dateStr);
+    if (isNaN(date)) return null;
+    const mm = String(date.getMonth() + 1).padStart(2, "0");
+    const dd = String(date.getDate()).padStart(2, "0");
+    return `${mm}-${dd}`;
   };
 
+  try {
+    const users = await User.find({});
+
+    const events = users.reduce((acc, user) => {
+      const dob = user.DOB ? formatMonthDay(user.DOB) : null;
+      const doj = user.DOJ ? formatMonthDay(user.DOJ) : null;
+
+      if (dob === todayMonthDay) {
+        acc.push({
+          type: "birthday",
+          name: user.name,
+          image: `${process.env.BASE_URL}storage/${user.image}`,
+          dob: user.DOB,
+          quote: birthdayQuote,
+        });
+      }
+
+      if (doj === todayMonthDay) {
+        acc.push({
+          type: "anniversary",
+          name: user.name,
+          image: `${process.env.BASE_URL}storage/${user.image}`,
+          doj: user.DOJ,
+          quote: anniversaryQuote,
+        });
+      }
+
+      return acc;
+    }, []);
+
+    res.status(200).json({
+      message: "Events fetched successfully",
+      data: events,
+    });
+  } catch (error) {
+    console.error("Error fetching today’s events:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
 
 exports.getAttendanceReport = async (req, res) => {
   try {
@@ -567,10 +581,8 @@ exports.getAttendanceReport = async (req, res) => {
     console.log("📘 Attendance Query:", attendanceQuery);
     console.log("📘 Attendance Records Found:", attendanceData.length);
 
-   
     const salaryQuery = {
       employeeID: employeeId,
-      
     };
 
     const userSalary = await UserSalary.findOne(salaryQuery);
@@ -589,7 +601,9 @@ exports.getAttendanceReport = async (req, res) => {
     let totalWorkingDays = attendanceData.length;
 
     attendanceData.forEach((record) => {
-      const dateStr = `${year}-${String(monthNum).padStart(2, "0")}-${String(record.date).padStart(2, "0")}`;
+      const dateStr = `${year}-${String(monthNum).padStart(2, "0")}-${String(
+        record.date
+      ).padStart(2, "0")}`;
       if (record.present === "Present") {
         presentDays++;
       } else if (record.present === "Absent") {
@@ -621,12 +635,3 @@ exports.getAttendanceReport = async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 };
-
-
-
-
-
-
-  
-  
-  
