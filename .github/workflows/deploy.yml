@@ -19,7 +19,7 @@ jobs:
           node-version: '20'
 
       - name: 📦 Compress Backend Code (exclude storage, node_modules)
-        run: tar --exclude='./storage' --exclude='./node_modules' --exclude='.DS_Store' -czvf backend.tar.gz .
+         tar --exclude='./storage' --exclude='./node_modules' --exclude='.DS_Store' --exclude='./.git' -czvf backend.tar.gz .
 
 
       - name: 🚀 Upload to Server via SCP
