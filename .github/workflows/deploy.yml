@@ -31,7 +31,7 @@ jobs:
           password: ${{ secrets.BACKEND_SSH_PASSWORD }}
           port: ${{ secrets.BACKEND_SSH_PORT }}
           source: "backend.tar.gz"
-          target: "/home/apisseven/"
+          target: "/home/apiseven/"
 
       - name: 🔐 SSH Deploy with .env Safety
         uses: appleboy/ssh-action@master
@@ -42,24 +42,24 @@ jobs:
           port: ${{ secrets.BACKEND_SSH_PORT }}
           script: |
             echo "🔐 Backing up .env (if exists)"
-            cd /home/apisseven/public_html/Crm_Backnd
+            cd /home/apiseven/public_html/Crm_Backnd
             if [ -f .env ]; then
-              cp .env /home/apisseven/.env_backup
+              cp .env /home/apiseven/.env_backup
             fi
 
             echo "🛡️ Full code backup"
             timestamp=$(date +%Y%m%d_%H%M%S)
-            mkdir -p /home/apisseven/backup_backend
-            cp -r . /home/apisseven/backup_backend/backup_$timestamp
+            mkdir -p /home/apiseven/backup_backend
+            cp -r . /home/apiseven/backup_backend/backup_$timestamp
 
             echo "📦 Extracting new backend.tar.gz"
-            tar -xzvf /home/apisseven/backend.tar.gz -C .
-            rm /home/apisseven/backend.tar.gz
+            tar -xzvf /home/apiseven/backend.tar.gz -C .
+            rm /home/apiseven/backend.tar.gz
 
             echo "♻️ Restoring .env (if backup exists)"
-            if [ -f /home/apisseven/.env_backup ]; then
-              cp /home/apisseven/.env_backup .env
-              rm /home/apisseven/.env_backup
+            if [ -f /home/apiseven/.env_backup ]; then
+              cp /home/apiseven/.env_backup .env
+              rm /home/apiseven/.env_backup
             fi
 
             echo "📦 Installing packages"
