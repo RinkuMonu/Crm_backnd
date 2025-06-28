@@ -575,12 +575,13 @@ exports.getTodayEvents = async (req, res) => {
       const dob = user.DOB ? formatMonthDay(user.DOB) : null;
       const doj = user.DOJ ? formatMonthDay(user.DOJ) : null;
 
-      // Optional fallback image
-      const imageUrl = user.image
-        ? `${process.env.BASE_URL || "https://api.sevenunique.com/"}storage/${
-            user.image
-          }`
-        : "" ;
+      // // Optional fallback image
+      // const imageUrl = user.image
+      //   ? `${process.env.BASE_URL || "https://api.sevenunique.com/"}storage/${
+      //       user.image
+      //     }`
+      //   : "" ;
+      //       // console.log(imageUrl);
 
       // Quotes should be defined or imported
       const birthdayQuote = "Wishing you a day filled with happiness!";
@@ -591,7 +592,7 @@ exports.getTodayEvents = async (req, res) => {
         acc.push({
           type: "birthday",
           name: user.name,
-          image: imageUrl,
+          image: user.image,
           dob: user.DOB,
           quote: birthdayQuote,
         });
@@ -601,7 +602,7 @@ exports.getTodayEvents = async (req, res) => {
         acc.push({
           type: "anniversary",
           name: user.name,
-          image: imageUrl,
+          image: user.image,
           doj: user.DOJ,
           quote: anniversaryQuote,
         });
