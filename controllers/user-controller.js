@@ -781,7 +781,8 @@ class UserController {
   viewLeaveApplications = async (req, res, next) => {
     try {
       const data = req.body;
-
+      console.log(data);
+      
       if (data.appliedDate) {
         const dateStr = new Date(data.appliedDate)
           .toISOString()
