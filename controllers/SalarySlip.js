@@ -580,7 +580,7 @@ exports.getTodayEvents = async (req, res) => {
         ? `${process.env.BASE_URL || "https://api.sevenunique.com/"}storage/${
             user.image
           }`
-        : "";
+        : "" ;
 
       // Quotes should be defined or imported
       const birthdayQuote = "Wishing you a day filled with happiness!";
