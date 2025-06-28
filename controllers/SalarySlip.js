@@ -555,7 +555,10 @@ const anniversaryQuote =
 // };
 exports.getTodayEvents = async (req, res) => {
   const today = new Date();
-  const todayMonthDay = `${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const todayMonthDay = `${String(today.getMonth() + 1).padStart(
+    2,
+    "0"
+  )}-${String(today.getDate()).padStart(2, "0")}`;
 
   const formatMonthDay = (dateStr) => {
     const date = new Date(dateStr);
@@ -574,12 +577,15 @@ exports.getTodayEvents = async (req, res) => {
 
       // Optional fallback image
       const imageUrl = user.image
-        ? `${process.env.BASE_URL || ""}storage/${user.image}`
-        : `${process.env.BASE_URL || ""}default-avatar.jpg`;
+        ? `${process.env.BASE_URL || "https://api.sevenunique.com/"}storage/${
+            user.image
+          }`
+        : "" ;
 
       // Quotes should be defined or imported
       const birthdayQuote = "Wishing you a day filled with happiness!";
-      const anniversaryQuote = "Happy Work Anniversary! Thank you for being part of the team.";
+      const anniversaryQuote =
+        "Happy Work Anniversary! Thank you for being part of the team.";
 
       if (dob === todayMonthDay) {
         acc.push({
@@ -613,7 +619,6 @@ exports.getTodayEvents = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
-
 
 exports.getAttendanceReport = async (req, res) => {
   try {
