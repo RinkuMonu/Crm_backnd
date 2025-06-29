@@ -136,21 +136,14 @@ class UserController {
       Un_no,
       nominee_address,
       nominee_age,
-      image: files?.profile?.[0]?.filename || "user.png",
-      employee_adhar_image:
-        files?.employee_adhar_image?.[0]?.filename || "user.png",
-      Policeverification:
-        files?.Policeverification?.[0]?.filename || "user.png",
-      employee_pan_image:
-        files?.employee_pan_image?.[0]?.filename || "user.png",
-      mother_adhar_image:
-        files?.mother_adhar_image?.[0]?.filename || "user.png",
-      father_adhar_image:
-        files?.father_adhar_image?.[0]?.filename || "user.png",
-      tenth_marksheet_img:
-        files?.tenth_marksheet_img?.[0]?.filename || "user.png",
-      twelth_marksheet_img:
-        files?.twelth_marksheet_img?.[0]?.filename || "user.png",
+      image: files?.profile?.[0]?.filename,
+      employee_adhar_image: files?.employee_adhar_image?.[0]?.filename,
+      Policeverification: files?.Policeverification?.[0]?.filename,
+      employee_pan_image: files?.employee_pan_image?.[0]?.filename,
+      mother_adhar_image: files?.mother_adhar_image?.[0]?.filename,
+      father_adhar_image: files?.father_adhar_image?.[0]?.filename,
+      tenth_marksheet_img: files?.tenth_marksheet_img?.[0]?.filename,
+      twelth_marksheet_img: files?.twelth_marksheet_img?.[0]?.filename,
     };
 
     const userResp = await userService.createUser(user);
@@ -317,7 +310,10 @@ class UserController {
           } Found`
         )
       );
-    const employees = emps.map((o) => new UserDto(o));
+    const sortedEmps = emps.sort(
+      (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+    );
+    const employees = sortedEmps.map((o) => new UserDto(o));
     res.json({
       success: true,
       message: `${
@@ -580,7 +576,6 @@ class UserController {
       };
 
       console.log(query);
-      
 
       const resp = await attendanceService.findAllAttendance(query);
       if (!resp)
@@ -782,7 +777,7 @@ class UserController {
     try {
       const data = req.body;
       console.log(data);
-      
+
       if (data.appliedDate) {
         const dateStr = new Date(data.appliedDate)
           .toISOString()
