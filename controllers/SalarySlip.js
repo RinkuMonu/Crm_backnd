@@ -476,9 +476,9 @@ exports.salarySlip = async (req, res) => {
 
     transporter.sendMail(mailOptions, (err, info) => {
       if (err) {
-        console.error("❌ Failed to send email:", err);
+        console.error("   Failed to send email:", err);
       } else {
-        console.log("✅ Email sent:", info.response);
+        console.log("  Email sent:", info.response);
       }
     });
 
@@ -488,7 +488,7 @@ exports.salarySlip = async (req, res) => {
       file: `${process.env.BASE_URL}storage/${fileName}`, // This should be served as static route
     });
   } catch (error) {
-    console.error("❌ Salary slip generation failed:", error);
+    console.error("   Salary slip generation failed:", error);
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
@@ -698,7 +698,7 @@ exports.getAttendanceReport = async (req, res) => {
 
     res.status(200).json(response);
   } catch (error) {
-    console.error("❌ Error in getAttendanceReport:", error);
+    console.error("   Error in getAttendanceReport:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 };

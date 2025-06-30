@@ -555,7 +555,7 @@ class UserController {
       attendance.regularized = true;
       attendance.regularizeType = "OUT";
       attendance.regularizeReason = regularizeReason;
-      attendance.present = "Half-day"; // ✅ Mandatory for HR review
+      attendance.present = "Half-day"; //   Mandatory for HR review
 
       await attendance.save();
 
@@ -695,7 +695,7 @@ class UserController {
       if (month) filter.month = month;
       if (date) filter.date = date;
 
-      // ✅ Proper Date Range Filter (based on year/month/date fields)
+      //   Proper Date Range Filter (based on year/month/date fields)
       if (fromDate && toDate) {
         const from = new Date(fromDate);
         const to = new Date(toDate);
@@ -1011,9 +1011,9 @@ class UserController {
 
       transporter.sendMail(mailOptions, (err, info) => {
         if (err) {
-          console.error("❌ Failed to send email:", err);
+          console.error("   Failed to send email:", err);
         } else {
-          console.log("✅ Email sent:", info.response);
+          console.log("  Email sent:", info.response);
         }
       });
 
@@ -1027,14 +1027,14 @@ class UserController {
         return next(ErrorHandler.serverError("Failed to assign letter"));
       }
 
-      // ✅ Convert to public URL
+      //   Convert to public URL
       const fileName = path.basename(outputPath);
       const publicPath = `/storage/later-head/${fileName}`;
       const fullUrl = `${req.protocol}://${req.get("host")}${publicPath}`;
 
       res.json({ success: true, data: resp, filePath: fullUrl });
     } catch (error) {
-      console.error("❌ Error in assignletter:", error);
+      console.error("   Error in assignletter:", error);
       res.json({ success: false, error: error.message });
     }
   };
