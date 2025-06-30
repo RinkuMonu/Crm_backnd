@@ -20,7 +20,7 @@ router.post(
     asyncMiddleware(userController.createUser)
 );// Create User
 
-router.patch(
+router.put(
     '/userDoc/:id',
     upload.fields([
         { name: 'employee_adhar_image', maxCount: 1 },
