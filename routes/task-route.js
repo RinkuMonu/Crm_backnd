@@ -1,14 +1,15 @@
 const router = require('express').Router();
-const salarySlip  = require('../controllers/SalarySlip');
+const salarySlip = require('../controllers/SalarySlip');
 const taskController = require('../controllers/task-controller');
-const {auth} = require('../middlewares/auth-middleware')
+const { auth } = require('../middlewares/auth-middleware')
 const upload = require('../services/excel-upload-services');
 const eventUpload = require('../services/events-service');
 
 
 // Employee routes
-router.post('/', upload.single("file"), taskController.createTaskWithLeads); 
-router.put('/updatelead',  taskController.updateLead);
+router.post('/', upload.single("file"), taskController.createTaskWithLeads);
+router.get('/user/:id', (taskController.getUserNoFilter));
+router.put('/updatelead', taskController.updateLead);
 router.get('/user-today/:_id', taskController.getTodayTasks);
 router.get('/getlead/:id', taskController.getLeadsByTaskId);
 router.put('/update-status', taskController.updateTaskStatusAndRemark);
