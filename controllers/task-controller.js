@@ -6,6 +6,9 @@ const Deal = require("../models/Deals");
 const Meeting = require("../models/Meeting");
 const xlsx = require("xlsx");
 const Event = require("../models/Events");
+const userService = require("../services/user-service");
+const ErrorHandler = require("../utils/error-handler");
+const UserDto = require("../dtos/user-dto");
 
 exports.createTaskWithLeads = async (req, res, next) => {
   try {
@@ -93,6 +96,15 @@ exports.createTaskWithLeads = async (req, res, next) => {
     console.error("   Error:", error);
     res.status(500).json({ success: false, error: error.message });
   }
+};
+
+exports.getUserNoFilter = async (req, res, next) => {
+  const { id } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(id))
+    return next(ErrorHandler.badRequest("Invalid User Id"));
+  const emp = await userService.findUser({ _id: id });
+  if (!emp) return next(ErrorHandler.notFound("No User Found"));
+  res.json({ success: true, message: "User Found", data: new UserDto(emp) });
 };
 
 // Controller
