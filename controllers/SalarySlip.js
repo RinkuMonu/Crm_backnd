@@ -481,7 +481,6 @@ exports.salarySlip = async (req, res) => {
         console.log("✅ Email sent:", info.response);
       }
     });
-
     res.status(200).json({
       success: true,
       message: "Salary slip generated and emailed.",
