@@ -69,4 +69,3 @@ jobs:
             pm2 restart backend-app || pm2 start server.js --name backend-app
 
             echo "✅ Deployment finished!"
-
