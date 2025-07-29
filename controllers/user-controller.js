@@ -136,21 +136,14 @@ class UserController {
       Un_no,
       nominee_address,
       nominee_age,
-      image: files?.profile?.[0]?.filename || "user.png",
-      employee_adhar_image:
-        files?.employee_adhar_image?.[0]?.filename || "user.png",
-      Policeverification:
-        files?.Policeverification?.[0]?.filename || "user.png",
-      employee_pan_image:
-        files?.employee_pan_image?.[0]?.filename || "user.png",
-      mother_adhar_image:
-        files?.mother_adhar_image?.[0]?.filename || "user.png",
-      father_adhar_image:
-        files?.father_adhar_image?.[0]?.filename || "user.png",
-      tenth_marksheet_img:
-        files?.tenth_marksheet_img?.[0]?.filename || "user.png",
-      twelth_marksheet_img:
-        files?.twelth_marksheet_img?.[0]?.filename || "user.png",
+      image: files?.profile?.[0]?.filename,
+      employee_adhar_image: files?.employee_adhar_image?.[0]?.filename,
+      Policeverification: files?.Policeverification?.[0]?.filename,
+      employee_pan_image: files?.employee_pan_image?.[0]?.filename,
+      mother_adhar_image: files?.mother_adhar_image?.[0]?.filename,
+      father_adhar_image: files?.father_adhar_image?.[0]?.filename,
+      tenth_marksheet_img: files?.tenth_marksheet_img?.[0]?.filename,
+      twelth_marksheet_img: files?.twelth_marksheet_img?.[0]?.filename,
     };
 
     const userResp = await userService.createUser(user);
@@ -306,23 +299,69 @@ class UserController {
     }
   };
 
+  UserDoc = async (req, res, next) => {
+    try {
+      const { id } = req.params;
+
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({ success: false, message: "Invalid user ID." });
+      }
+
+      if (!req.files || Object.keys(req.files).length === 0) {
+        return res.status(400).json({ success: false, message: "No documents uploaded." });
+      }
+
+      const updateData = {};
+
+      // Prepare file update data
+      Object.keys(req.files).forEach((field) => {
+        const file = req.files[field][0]; // multer stores files as array
+        if (file) {
+          updateData[field] = file.path.replace(/\\/g, "/"); // use forward slashes for URLs
+        }
+      });
+
+      // Update user document
+      const updatedUser = await userService.updateUser(id, updateData);
+
+      if (!updatedUser) {
+        return res.status(404).json({ success: false, message: "User not found." });
+      }
+
+      res.json({
+        success: true,
+        message: "Documents updated successfully",
+        data: updatedUser,
+      });
+    } catch (err) {
+      console.error("UserDoc Error:", err);
+      res.status(500).json({
+        success: false,
+        message: "Server error while updating documents.",
+      });
+    }
+  };
+
+
+
   getUsers = async (req, res, next) => {
     const type = req.path.split("/").pop().replace("s", "");
     const emps = await userService.findUsers({ type });
     if (!emps || emps.length < 1)
       return next(
         ErrorHandler.notFound(
-          `No ${
-            type.charAt(0).toUpperCase() + type.slice(1).replace(" ", "")
+          `No ${type.charAt(0).toUpperCase() + type.slice(1).replace(" ", "")
           } Found`
         )
       );
-    const employees = emps.map((o) => new UserDto(o));
+    const sortedEmps = emps.sort(
+      (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+    );
+    const employees = sortedEmps.map((o) => new UserDto(o));
     res.json({
       success: true,
-      message: `${
-        type.charAt(0).toUpperCase() + type.slice(1).replace(" ", "")
-      } List Found`,
+      message: `${type.charAt(0).toUpperCase() + type.slice(1).replace(" ", "")
+        } List Found`,
       data: employees,
     });
   };
@@ -345,8 +384,7 @@ class UserController {
     if (!mongoose.Types.ObjectId.isValid(id))
       return next(
         ErrorHandler.badRequest(
-          `Invalid ${
-            type.charAt(0).toUpperCase() + type.slice(1).replace(" ", "")
+          `Invalid ${type.charAt(0).toUpperCase() + type.slice(1).replace(" ", "")
           } Id`
         )
       );
@@ -354,8 +392,7 @@ class UserController {
     if (!emp)
       return next(
         ErrorHandler.notFound(
-          `No ${
-            type.charAt(0).toUpperCase() + type.slice(1).replace(" ", "")
+          `No ${type.charAt(0).toUpperCase() + type.slice(1).replace(" ", "")
           } Found`
         )
       );
@@ -398,8 +435,8 @@ class UserController {
       "Saturday",
     ];
     try {
-      const { employeeID } = req.body;
-      const now = new Date();
+      const { employeeID, date } = req.body;
+      const now = new Date(date);
 
       const holidayCheck = attendanceService.isHoliday(now);
       if (holidayCheck.isHoliday) {
@@ -415,6 +452,7 @@ class UserController {
         date: now.getDate(),
         day: days[now.getDay()],
       };
+      // return null;
 
       const existing = await attendanceService.findAttendance(attendanceData);
       if (existing && existing.inTime) {
@@ -446,8 +484,8 @@ class UserController {
 
   markOutAttendance = async (req, res, next) => {
     try {
-      const { employeeID } = req.body;
-      const now = new Date();
+      const { employeeID, date } = req.body;
+      const now = new Date(date);
 
       const query = {
         employeeID,
@@ -517,7 +555,7 @@ class UserController {
       attendance.regularized = true;
       attendance.regularizeType = "OUT";
       attendance.regularizeReason = regularizeReason;
-      attendance.present = "Half-day"; // ✅ Mandatory for HR review
+      attendance.present = "Half-day"; //   Mandatory for HR review
 
       await attendance.save();
 
@@ -562,16 +600,25 @@ class UserController {
 
   getAllTodayInRequests = async (req, res, next) => {
     try {
-      // const today = new Date();
+      const now = new Date(req.query.date);
+      // console.log(req);
 
-      const filter = {
-        year: req.query.year,
-        month: req.query.month,
-        date: req.query.date,
+      // const filter = {
+      //   year: req.query.year,
+      //   month: req.query.month,
+      //   date: req.query.date,
+      //   inApproved: false,
+      // };
+      const query = {
+        year: now.getFullYear(),
+        month: now.getMonth() + 1,
+        date: now.getDate(),
         inApproved: false,
       };
 
-      const resp = await attendanceService.findAllAttendance(filter);
+      console.log(query);
+
+      const resp = await attendanceService.findAllAttendance(query);
       if (!resp)
         return next(ErrorHandler.notFound("No IN Requests found for today"));
       const sortedResp = resp.sort(
@@ -648,7 +695,7 @@ class UserController {
       if (month) filter.month = month;
       if (date) filter.date = date;
 
-      // ✅ Proper Date Range Filter (based on year/month/date fields)
+      //   Proper Date Range Filter (based on year/month/date fields)
       if (fromDate && toDate) {
         const from = new Date(fromDate);
         const to = new Date(toDate);
@@ -770,6 +817,7 @@ class UserController {
   viewLeaveApplications = async (req, res, next) => {
     try {
       const data = req.body;
+      console.log(data);
 
       if (data.appliedDate) {
         const dateStr = new Date(data.appliedDate)
@@ -864,9 +912,8 @@ class UserController {
       const data = req.body;
 
       const d = new Date();
-      data.assignedDate = `${d.getFullYear()}-${
-        d.getMonth() + 1
-      }-${d.getDate()}`;
+      data.assignedDate = `${d.getFullYear()}-${d.getMonth() + 1
+        }-${d.getDate()}`;
       const letterHTML = data.letterHTML;
 
       // Paths
@@ -964,9 +1011,9 @@ class UserController {
 
       transporter.sendMail(mailOptions, (err, info) => {
         if (err) {
-          console.error("❌ Failed to send email:", err);
+          console.error("   Failed to send email:", err);
         } else {
-          console.log("✅ Email sent:", info.response);
+          console.log("  Email sent:", info.response);
         }
       });
 
@@ -980,14 +1027,14 @@ class UserController {
         return next(ErrorHandler.serverError("Failed to assign letter"));
       }
 
-      // ✅ Convert to public URL
+      //   Convert to public URL
       const fileName = path.basename(outputPath);
       const publicPath = `/storage/later-head/${fileName}`;
       const fullUrl = `${req.protocol}://${req.get("host")}${publicPath}`;
 
       res.json({ success: true, data: resp, filePath: fullUrl });
     } catch (error) {
-      console.error("❌ Error in assignletter:", error);
+      console.error("   Error in assignletter:", error);
       res.json({ success: false, error: error.message });
     }
   };

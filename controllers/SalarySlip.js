@@ -476,9 +476,9 @@ exports.salarySlip = async (req, res) => {
 
     transporter.sendMail(mailOptions, (err, info) => {
       if (err) {
-        console.error("❌ Failed to send email:", err);
+        console.error("   Failed to send email:", err);
       } else {
-        console.log("✅ Email sent:", info.response);
+        console.log("  Email sent:", info.response);
       }
     });
     res.status(200).json({
@@ -487,7 +487,7 @@ exports.salarySlip = async (req, res) => {
       file: `${process.env.BASE_URL}storage/${fileName}`, // This should be served as static route
     });
   } catch (error) {
-    console.error("❌ Salary slip generation failed:", error);
+    console.error("   Salary slip generation failed:", error);
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
@@ -498,6 +498,60 @@ const anniversaryQuote =
   "Wishing you continued success and happiness on your work anniversary!";
 
 // Get users who have birthday or anniversary today
+// exports.getTodayEvents = async (req, res) => {
+//   const today = new Date();
+//   const todayMonthDay = `${String(today.getMonth() + 1).padStart(
+//     2,
+//     "0"
+//   )}-${String(today.getDate()).padStart(2, "0")}`;
+
+//   const formatMonthDay = (dateStr) => {
+//     const date = new Date(dateStr);
+//     if (isNaN(date)) return null;
+//     const mm = String(date.getMonth() + 1).padStart(2, "0");
+//     const dd = String(date.getDate()).padStart(2, "0");
+//     return `${mm}-${dd}`;
+//   };
+
+//   try {
+//     const users = await User.find({});
+
+//     const events = users.reduce((acc, user) => {
+//       const dob = user.DOB ? formatMonthDay(user.DOB) : null;
+//       const doj = user.DOJ ? formatMonthDay(user.DOJ) : null;
+
+//       if (dob === todayMonthDay) {
+//         acc.push({
+//           type: "birthday",
+//           name: user.name,
+//           image: `${process.env.BASE_URL}storage/${user.image}`,
+//           dob: user.DOB,
+//           quote: birthdayQuote,
+//         });
+//       }
+
+//       if (doj === todayMonthDay) {
+//         acc.push({
+//           type: "anniversary",
+//           name: user.name,
+//           image: `${process.env.BASE_URL}storage/${user.image}`,
+//           doj: user.DOJ,
+//           quote: anniversaryQuote,
+//         });
+//       }
+
+//       return acc;
+//     }, []);
+
+//     res.status(200).json({
+//       message: "Events fetched successfully",
+//       data: events,
+//     });
+//   } catch (error) {
+//     console.error("Error fetching today’s events:", error);
+//     res.status(500).json({ message: "Internal server error" });
+//   }
+// };
 exports.getTodayEvents = async (req, res) => {
   const today = new Date();
   const todayMonthDay = `${String(today.getMonth() + 1).padStart(
@@ -507,7 +561,7 @@ exports.getTodayEvents = async (req, res) => {
 
   const formatMonthDay = (dateStr) => {
     const date = new Date(dateStr);
-    if (isNaN(date)) return null;
+    if (isNaN(date.getTime())) return null; // extra check
     const mm = String(date.getMonth() + 1).padStart(2, "0");
     const dd = String(date.getDate()).padStart(2, "0");
     return `${mm}-${dd}`;
@@ -520,11 +574,24 @@ exports.getTodayEvents = async (req, res) => {
       const dob = user.DOB ? formatMonthDay(user.DOB) : null;
       const doj = user.DOJ ? formatMonthDay(user.DOJ) : null;
 
+      // // Optional fallback image
+      // const imageUrl = user.image
+      //   ? `${process.env.BASE_URL || "https://api.sevenunique.com/"}storage/${
+      //       user.image
+      //     }`
+      //   : "" ;
+      //       // console.log(imageUrl);
+
+      // Quotes should be defined or imported
+      const birthdayQuote = "Wishing you a day filled with happiness!";
+      const anniversaryQuote =
+        "Happy Work Anniversary! Thank you for being part of the team.";
+
       if (dob === todayMonthDay) {
         acc.push({
           type: "birthday",
           name: user.name,
-          image: `${process.env.BASE_URL}storage/${user.image}`,
+          image: user.image,
           dob: user.DOB,
           quote: birthdayQuote,
         });
@@ -534,7 +601,7 @@ exports.getTodayEvents = async (req, res) => {
         acc.push({
           type: "anniversary",
           name: user.name,
-          image: `${process.env.BASE_URL}storage/${user.image}`,
+          image: user.image,
           doj: user.DOJ,
           quote: anniversaryQuote,
         });
@@ -630,7 +697,7 @@ exports.getAttendanceReport = async (req, res) => {
 
     res.status(200).json(response);
   } catch (error) {
-    console.error("❌ Error in getAttendanceReport:", error);
+    console.error("   Error in getAttendanceReport:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 };

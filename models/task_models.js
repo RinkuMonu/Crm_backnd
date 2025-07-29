@@ -10,7 +10,7 @@ const TaskSchema = new Schema({
   assignedTo: { type: Schema.Types.ObjectId, ref: 'User' },
   createdAt: { type: Date, default: Date.now },
   Status:{type:String,enum:["Todo","Progress","Pending","Done"]},
-  remark: { type: String } // ✅ added this
+  remark: { type: String } //   added this
 });
 
 module.exports = mongoose.model('Task', TaskSchema);

@@ -4,7 +4,7 @@
   "description": "A system for company to manage their teams, employee and targets",
   "main": "server.js",
   "scripts": {
-    "dev": "node server.js",
+    "dev": "npx nodemon server.js",
     "start": "npm server.js"
   },
   "keywords": [],

@@ -6,6 +6,9 @@ const Deal = require("../models/Deals");
 const Meeting = require("../models/Meeting");
 const xlsx = require("xlsx");
 const Event = require("../models/Events");
+const userService = require("../services/user-service");
+const ErrorHandler = require("../utils/error-handler");
+const UserDto = require("../dtos/user-dto");
 
 exports.createTaskWithLeads = async (req, res, next) => {
   try {
@@ -90,9 +93,18 @@ exports.createTaskWithLeads = async (req, res, next) => {
       });
     }
   } catch (error) {
-    console.error("❌ Error:", error);
+    console.error("   Error:", error);
     res.status(500).json({ success: false, error: error.message });
   }
+};
+
+exports.getUserNoFilter = async (req, res, next) => {
+  const { id } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(id))
+    return next(ErrorHandler.badRequest("Invalid User Id"));
+  const emp = await userService.findUser({ _id: id });
+  if (!emp) return next(ErrorHandler.notFound("No User Found"));
+  res.json({ success: true, message: "User Found", data: new UserDto(emp) });
 };
 
 // Controller
@@ -138,7 +150,7 @@ exports.getTodayTasks = async (req, res, next) => {
       createdAt: { $gte: startDate, $lte: endDate },
     }).populate("assignedBy");
 
-    console.log("✅ Tasks found:", tasks.length);
+    console.log("  Tasks found:", tasks.length);
     if (tasks.length === 0) {
       console.log("⚠️ No tasks found for this date.");
     }
@@ -158,7 +170,7 @@ exports.getTodayTasks = async (req, res, next) => {
       },
     });
   } catch (error) {
-    console.error("❌ Error in getTodayTasks:", error);
+    console.error("   Error in getTodayTasks:", error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
@@ -172,7 +184,10 @@ exports.getLeadsByTaskId = async (req, res) => {
   }
 
   try {
-    const leads = await Lead.find({ taskID: id }).populate("taskID");
+    const leads = await Lead.find({ taskID: id }).populate("taskID").populate({
+      path: "taskID",
+      populate: { path: "assignedBy" }
+    });
     res.status(200).json(leads);
   } catch (error) {
     console.error("Error fetching leads by taskId:", error);
@@ -187,7 +202,7 @@ exports.updateLead = async (req, res) => {
     const { leadID, result, duration, interest, reminder } = req.body;
 
     if (!leadID) {
-      console.log("❌ Missing leadID");
+      console.log("   Missing leadID");
       return res
         .status(400)
         .json({ success: false, message: "leadID is required" });
@@ -209,17 +224,17 @@ exports.updateLead = async (req, res) => {
     );
 
     if (!updated) {
-      console.log("❌ Lead not found for ID:", leadID);
+      console.log("   Lead not found for ID:", leadID);
       return res
         .status(404)
         .json({ success: false, message: "Lead not found" });
     }
 
-    console.log("✅ Lead Updated Successfully:", updated);
+    console.log("  Lead Updated Successfully:", updated);
 
     res.json({ success: true, data: updated });
   } catch (error) {
-    console.error("🔥 Error While Updating Lead:", error);
+    console.error("Error While Updating Lead:", error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
@@ -245,7 +260,7 @@ exports.updateTaskStatusAndRemark = async (req, res, next) => {
         .json({ success: false, message: "Task not found" });
     }
 
-    console.log("✅ Task Updated:", updatedTask);
+    console.log("Task Updated:", updatedTask);
 
     res.json({
       success: true,
@@ -253,7 +268,7 @@ exports.updateTaskStatusAndRemark = async (req, res, next) => {
       data: updatedTask,
     });
   } catch (error) {
-    console.error("❌ Error in updateTaskStatusAndRemark:", error);
+    console.error("Error in updateTaskStatusAndRemark:", error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
@@ -278,7 +293,7 @@ exports.createDealFromLead = async (req, res) => {
       });
     }
 
-    // ✅ Create Deal using Lead data
+    //   Create Deal using Lead data
     const newDeal = new Deal({
       lead: leadID,
       title: lead.title || `Deal for ${lead.name}`,
@@ -301,7 +316,7 @@ exports.createDealFromLead = async (req, res) => {
       data: newDeal,
     });
   } catch (error) {
-    console.error("🔥 Error in creating deal:", error);
+    console.error("Error in creating deal:", error);
     res.status(500).json({
       success: false,
       message: error.message,
@@ -321,7 +336,7 @@ exports.getDealsByLeader = async (req, res) => {
 
     res.status(200).json({ success: true, data: deals });
   } catch (error) {
-    console.error("🔥 Error Fetching Deals:", error);
+    console.error("Error Fetching Deals:", error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
@@ -356,7 +371,7 @@ exports.assignEmployeeToDeal = async (req, res) => {
       data: updatedDeal,
     });
   } catch (error) {
-    console.error("🔥 Error in assigning employee:", error);
+    console.error("Error in assigning employee:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -397,20 +412,20 @@ exports.getMyDeals = async (req, res) => {
       .populate("assigned_leader", "name")
       .sort({ updatedAt: -1 });
 
-    console.log("📊 Total deals found:", deals.length);
+    console.log("Total deals found:", deals.length);
 
     if (deals.length === 0) {
-      console.warn("⚠️ No deals found for this employee");
+      console.warn("No deals found for this employee");
     } else {
       console.log(
-        "✅ Deals fetched successfully. First deal sample:",
+        "Deals fetched successfully. First deal sample:",
         deals[0]
       );
     }
 
     res.json({ success: true, data: deals });
   } catch (err) {
-    console.error("🔥 Error in getMyDeals:", err);
+    console.error("Error in getMyDeals:", err);
     res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -466,7 +481,7 @@ exports.getSalesLeaders = async (req, res) => {
     );
     res.status(200).json({ success: true, data: salesLeaders });
   } catch (error) {
-    console.error("❌ Error fetching sales leaders:", error);
+    console.error("Error fetching sales leaders:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -480,7 +495,7 @@ exports.getEmployee = async (req, res) => {
     }).select("_id name email");
     res.status(200).json({ success: true, data: salesLeaders });
   } catch (error) {
-    console.error("❌ Error fetching sales leaders:", error);
+    console.error("Error fetching sales leaders:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -535,7 +550,7 @@ exports.getTodayMeetingsByEmployee = async (req, res) => {
     // Return the meetings
     res.status(200).json({ success: true, data: meetings });
   } catch (error) {
-    console.error("❌ Error fetching today's meetings:", error);
+    console.error("Error fetching today's meetings:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -609,7 +624,7 @@ exports.createMeeting = async (req, res) => {
       data: newMeeting,
     });
   } catch (error) {
-    console.error("❌ Error creating meeting:", error);
+    console.error("   Error creating meeting:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -655,7 +670,7 @@ exports.createEvent = async (req, res) => {
       data: newEvent,
     });
   } catch (error) {
-    console.error("❌ Error creating event:", error);
+    console.error("   Error creating event:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -687,7 +702,7 @@ exports.getEventsByDate = async (req, res) => {
       data: events,
     });
   } catch (error) {
-    console.error("❌ Error fetching events by date:", error);
+    console.error("   Error fetching events by date:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
