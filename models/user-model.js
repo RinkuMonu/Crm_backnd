@@ -114,13 +114,12 @@ const userSchema = new Schema(
     },
     branch: {
       type: String,
-      enum: ["sales", "tech", "hr", "telecaller"],
+      enum: ["sales", "tech", "hr", "telecaller", "Security-Department","management","account"],
       trim: true,
     },
     desgination: {
       type: String,
       default: "No Address Specified",
-      maxlength: 100,
       trim: true,
     },
     gender: {
