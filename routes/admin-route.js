@@ -4,7 +4,7 @@ const teamController = require('../controllers/team-controller');
 const upload = require('../services/file-upload-service');
 const asyncMiddleware = require('../middlewares/async-middleware');
 const { salarySlip } = require('../controllers/SalarySlip');
-
+const globalIpController = require('../controllers/global-ip-controller');
 router.post(
     '/user',
     upload.fields([
@@ -72,6 +72,32 @@ router.post('/all-employee-attendance', asyncMiddleware(userController.viewEmplo
 
 // salary
 router.post('/genrate-salary-slip', salarySlip);
+
+// ===== Global IP Allowlist (Admin only) =====
+router.post(
+  '/global-ips',
+
+  asyncMiddleware(globalIpController.create)
+); // Add IP or CIDR
+
+router.get(
+  '/global-ips',
+
+  asyncMiddleware(globalIpController.list)
+); // List all IPs
+
+router.put(
+  '/global-ips/:id',
+
+  asyncMiddleware(globalIpController.update)
+); // Update label/value/active
+
+router.delete(
+  '/global-ips/:id',
+ 
+  asyncMiddleware(globalIpController.remove)
+); // Delete IP
+
 
 
 module.exports = router;

@@ -32,6 +32,8 @@ app.use(cors(corsOption));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cookieParser());
+app.set('trust proxy', true);
+
 
 // Routes
 app.use('/api/auth', authRoute);
