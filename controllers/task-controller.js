@@ -184,10 +184,12 @@ exports.getLeadsByTaskId = async (req, res) => {
   }
 
   try {
-    const leads = await Lead.find({ taskID: id }).populate("taskID").populate({
-      path: "taskID",
-      populate: { path: "assignedBy" }
-    });
+    const leads = await Lead.find({ taskID: id })
+      .populate("taskID")
+      .populate({
+        path: "taskID",
+        populate: { path: "assignedBy" },
+      });
     res.status(200).json(leads);
   } catch (error) {
     console.error("Error fetching leads by taskId:", error);
@@ -417,10 +419,7 @@ exports.getMyDeals = async (req, res) => {
     if (deals.length === 0) {
       console.warn("No deals found for this employee");
     } else {
-      console.log(
-        "Deals fetched successfully. First deal sample:",
-        deals[0]
-      );
+      console.log("Deals fetched successfully. First deal sample:", deals[0]);
     }
 
     res.json({ success: true, data: deals });
@@ -488,14 +487,26 @@ exports.getSalesLeaders = async (req, res) => {
 // for sales leader
 exports.getEmployee = async (req, res) => {
   try {
-    const { type } = req.query;
-    const salesLeaders = await User.find({
-      type: "employee",
-      branch: type == "employee" && { $in: ["tech", "telecaller"] },
-    }).select("_id name email");
-    res.status(200).json({ success: true, data: salesLeaders });
+    const { type } = req.query; // query param: employee ya leader
+
+    let filter = {};
+
+    if (type === "employee") {
+      filter = {
+        type: "employee",
+        branch: { $in: ["tech", "telecaller"] },
+      };
+    } else if (type === "leader") {
+      filter = { type: "leader" };
+    } else {
+      filter = {};
+    }
+
+    const users = await User.find(filter).select("_id name email type branch");
+
+    res.status(200).json({ success: true, data: users });
   } catch (error) {
-    console.error("Error fetching sales leaders:", error);
+    console.error("Error fetching users:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
