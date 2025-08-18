@@ -198,14 +198,14 @@ class UserController {
           );
         }
 
-        const { adminPassword } = req.body;
-        if (!adminPassword) {
-          return next(
-            ErrorHandler.badRequest(
-              `Please Enter Your Password To Change The Type`
-            )
-          );
-        }
+        // const { adminPassword } = req.body;
+        // if (!adminPassword) {
+        //   return next(
+        //     ErrorHandler.badRequest(
+        //       `Please Enter Your Password To Change The Type`
+        //     )
+        //   );
+        // }
 
         const { password: hashPassword } = await userService.findUser({ _id });
         const isPasswordValid = await userService.verifyPassword(
