@@ -185,6 +185,7 @@ class UserController {
         bank_name,
         desgination,
         gender,
+        
       } = req.body;
 
       type = type && type.toLowerCase();
