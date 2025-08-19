@@ -1091,6 +1091,8 @@ class UserController {
       res.json({ success: false, error });
     }
   };
+
+  
 }
 
 module.exports = new UserController();
