@@ -30,7 +30,7 @@ class AttendanceService {
       "2025-05-23": "Buddha Purnima",
       "2025-06-17": "Bakrid",
       "2025-08-15": "Independence Day",
-      "2025-08-19": "Raksha Bandhan",
+      
       "2025-09-05": "Teachers' Day",
       "2025-09-16": "Milad-un-Nabi",
       "2025-09-30": "Mahalaya Amavasya",
