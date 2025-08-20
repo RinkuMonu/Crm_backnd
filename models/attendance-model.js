@@ -1,8 +1,8 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 const Schema = mongoose.Schema;
 
 const AttendanceSchema = new Schema({
-  employeeID: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  employeeID: { type: Schema.Types.ObjectId, ref: "User", required: true },
 
   year: { type: Number, required: true },
   month: { type: Number, required: true },
@@ -15,10 +15,14 @@ const AttendanceSchema = new Schema({
   inApproved: { type: Boolean, default: false },
   outApproved: { type: Boolean, default: false },
 
-  present: { type: String, enum: ['Present', 'Half-day', 'Absent'], default: 'Absent' },
+  present: {
+    type: String,
+    enum: ["Present", "Half-day", "Absent"],
+    default: "Absent",
+  },
 
   regularized: { type: Boolean, default: false },
-  regularizeType: { type: String, enum: ['IN', 'OUT', null], default: null },
+  regularizeType: { type: String, enum: ["IN", "OUT", null], default: null },
   regularizeReason: { type: String, default: null },
   hrRemarks: { type: String, default: null },
 
@@ -28,4 +32,4 @@ const AttendanceSchema = new Schema({
   createdAt: { type: Date, default: Date.now },
 });
 
-module.exports = mongoose.model('Attendance', AttendanceSchema);
+module.exports = mongoose.model("Attendance", AttendanceSchema);

@@ -16,6 +16,18 @@ const fs = require("fs");
 const puppeteer = require("puppeteer"); // Puppeteer to generate PDF from HTML
 
 const path = require("path");
+const cron = require("node-cron");
+const moment = require("moment-timezone");
+const attendanceModel = require("../models/attendance-model");
+
+// ---- Helpers (all in this file) ----
+const nowUtc = () => new Date(); // server UTC
+const nowIst = () => moment(nowUtc()).tz("Asia/Kolkata");
+const ymdFromIst = (m) => ({
+  year: m.year(),
+  month: m.month() + 1,
+  date: m.date(),
+});
 
 class UserController {
   createUser = async (req, res, next) => {
@@ -468,45 +480,55 @@ class UserController {
   };
 
   markInAttendance = async (req, res, next) => {
-    const days = [
-      "Sunday",
-      "Monday",
-      "Tuesday",
-      "Wednesday",
-      "Thursday",
-      "Friday",
-      "Saturday",
-    ];
     try {
-      const { employeeID, date } = req.body;
-      const now = new Date(date);
+      const { employeeID } = req.body; // ❗️ date ignore; sirf server time use
+      if (!employeeID)
+        return next(ErrorHandler.badRequest("employeeID required"));
 
-      const holidayCheck = attendanceService.isHoliday(now);
+      // 1) Server time (UTC) + IST components
+      const nowUtc = new Date();
+      const nowIst = moment(nowUtc).tz("Asia/Kolkata");
+
+      const days = [
+        "Sunday",
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+      ];
+
+      // 2) Holiday check IST date par
+      const istDateOnly = nowIst.clone().startOf("day").toDate(); // for holiday util if needed
+      const holidayCheck = attendanceService.isHoliday(istDateOnly);
       if (holidayCheck.isHoliday) {
         return next(
           ErrorHandler.notAllowed(`Today is a holiday: ${holidayCheck.name}`)
         );
       }
 
+      // 3) Attendance key (IST day-boundary)
       const attendanceData = {
         employeeID,
-        year: now.getFullYear(),
-        month: now.getMonth() + 1,
-        date: now.getDate(),
-        day: days[now.getDay()],
+        year: nowIst.year(),
+        month: nowIst.month() + 1, // 1-12
+        date: nowIst.date(), // 1-31
+        day: days[nowIst.day()],
       };
-      // return null;
 
+      // 4) Duplicate guard
       const existing = await attendanceService.findAttendance(attendanceData);
       if (existing && existing.inTime) {
         return next(ErrorHandler.notAllowed("IN time already marked."));
       }
 
+      // 5) Save: store UTC Date for inTime, but keys by IST
       const newAttendance = {
         ...attendanceData,
-        inTime: now,
+        inTime: nowUtc, // stored as Date (UTC)
         inApproved: false,
-        present: "Absent", // default until approved
+        present: "Absent",
       };
 
       const result = await attendanceService.markAttendance(newAttendance);
@@ -527,51 +549,121 @@ class UserController {
 
   markOutAttendance = async (req, res, next) => {
     try {
-      const { employeeID, date } = req.body;
-      const now = new Date(date);
+      const { employeeID } = req.body;
+      if (!employeeID)
+        return next(ErrorHandler.badRequest("employeeID required"));
 
-      const query = {
-        employeeID,
-        year: now.getFullYear(),
-        month: now.getMonth() + 1,
-        date: now.getDate(),
-      };
+      const ist = nowIst();
+      const { year, month, date } = ymdFromIst(ist);
 
-      const attendance = await attendanceService.findAttendance(query);
+      // Aaj (IST) ka record lao
+      const attendance =
+        (await attendanceService.findAttendance?.({
+          employeeID,
+          year,
+          month,
+          date,
+        })) ||
+        (await attendanceModel.findOne({ employeeID, year, month, date }));
 
       if (!attendance || !attendance.inTime) {
         return next(ErrorHandler.notAllowed("IN time not marked yet."));
       }
 
       const inTime = new Date(attendance.inTime);
-      const workedHours = (now - inTime) / (1000 * 60 * 60);
+      const workedHours = (nowUtc() - inTime) / (1000 * 60 * 60);
 
       if (workedHours < 8) {
         const remaining = 8 - workedHours;
         const h = Math.floor(remaining);
         const m = Math.round((remaining - h) * 60);
-
         return res.json({
           success: false,
           status: 300,
-          message: `You still have ${h}h ${m}m remaining. Do you want to regularize?`,
+          message: `Abhi ${h}h ${m}m baaki hai. Regularize karna chahoge?`,
           needRegularize: true,
         });
       }
 
-      attendance.outTime = now;
+      attendance.outTime = nowUtc(); // exact server time
       attendance.outApproved = true;
-      await attendance.save();
+      if (attendance.isModified) {
+        await attendance.save();
+      } else {
+        // If service pattern preferred
+        await attendance.save();
+      }
 
       res.json({
         success: true,
-        message: "OUT time marked successfully",
+        message: "OUT time marked",
         newAttendance: attendance,
       });
-    } catch (error) {
-      res.status(500).json({ success: false, message: error.message });
+    } catch (err) {
+      res.status(500).json({ success: false, message: err.message });
     }
   };
+
+  /**
+   * AUTO OUT: everyday 6:30 PM IST
+   * - outTime = 6:30 PM IST
+   * - outApproved = workedHours >= 8
+   * - needRegularize = true if < 8 (field optional)
+   */
+
+  startAutoOut630IST = () => {
+    // Har minute chalega; 6:30 IST pe hi fire karega (server TZ agnostic)
+    cron.schedule("* * * * *", async () => {
+      console.log("[autoOut] Checking for auto-out at 6:30 PM IST");
+
+      try {
+        const istNow = nowIst();
+        if (!(istNow.hour() === 18 && istNow.minute() === 30)) return;
+
+        // Aaj 18:30 IST ko UTC instant
+        const ist630 = istNow
+          .clone()
+          .hour(18)
+          .minute(30)
+          .second(0)
+          .millisecond(0);
+        const outUtc = new Date(ist630.toDate());
+        const { year, month, date } = ymdFromIst(ist630);
+
+        const filter = {
+          year,
+          month,
+          date,
+          outTime: null,
+          inTime: { $ne: null },
+        };
+        const pending =
+          (await attendanceModel.find?.(filter)) ||
+          (await attendanceService.findMany?.(filter)) ||
+          [];
+
+        for (const att of pending) {
+          const inTime = new Date(att.inTime);
+          const workedHours = (outUtc - inTime) / (1000 * 60 * 60);
+
+          att.outTime = outUtc;
+          att.outApproved = workedHours >= 8;
+
+          await att.save();
+        }
+
+        console.log(
+          `[autoOut] ${pending.length} employees auto-out @ 6:30 PM IST`
+        );
+      } catch (e) {
+        console.error("[autoOut] error:", e);
+      }
+    });
+  };
+
+  // ---- Example wiring (call once from server.js after DB ready) ----
+  // const { startAutoOut630IST } = require("./attendanceOut.controller+job");
+  // startAutoOut630IST();
 
   // 🔹 regularizeAttendanceRequest (OUT)
   regularizeAttendanceRequest = async (req, res, next) => {
