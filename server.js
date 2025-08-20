@@ -14,11 +14,12 @@ const leaderRoute = require("./routes/leader-route");
 const errorMiddleware = require("./middlewares/error-middleware");
 const ErrorHandler = require("./utils/error-handler");
 const { auth, authRole } = require("./middlewares/auth-middleware");
+const { startAutoOut630IST } = require("./controllers/user-controller");
 const app = express();
 
 // Database Connection
 dbConnection();
-
+startAutoOut630IST();
 const { CLIENT_URL } = process.env;
 console.log(CLIENT_URL);
 
