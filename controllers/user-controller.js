@@ -185,7 +185,6 @@ class UserController {
         bank_name,
         desgination,
         gender,
-        
       } = req.body;
 
       type = type && type.toLowerCase();
@@ -319,6 +318,7 @@ class UserController {
           .status(400)
           .json({ success: false, message: "Invalid user ID." });
       }
+      console.log(req.files);
 
       if (!req.files || Object.keys(req.files).length === 0) {
         return res
@@ -1091,8 +1091,6 @@ class UserController {
       res.json({ success: false, error });
     }
   };
-
-  
 }
 
 module.exports = new UserController();

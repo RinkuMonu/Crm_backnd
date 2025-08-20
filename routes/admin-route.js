@@ -39,7 +39,8 @@ router.put(
     { name: "Policeverification", maxCount: 1 },
   ]),
   asyncMiddleware(userController.UserDoc)
-); // Create User
+); 
+// Create User
 router.patch(
   "/user/:id",
   upload.single("profile"),
