@@ -360,27 +360,51 @@ class UserController {
   };
 
   getUsers = async (req, res, next) => {
-    const type = req.path.split("/").pop().replace("s", "");
-    const emps = await userService.findUsers({ type });
-    if (!emps || emps.length < 1)
-      return next(
-        ErrorHandler.notFound(
-          `No ${
-            type.charAt(0).toUpperCase() + type.slice(1).replace(" ", "")
-          } Found`
-        )
+    try {
+      const { status = "All", search = "" } = req.query;
+      const filter = { type: "employee" };
+
+      if (status && status !== "All") {
+        const statusMap = {
+          active: "active",
+          provison: "provision",
+          provision: "provision",
+          notice: "notice",
+          banned: "banned",
+        };
+        if (statusMap[status.toLowerCase()]) {
+          filter.status = statusMap[status.toLowerCase()];
+        }
+      }
+
+      // search filter
+      if (search && search.trim()) {
+        const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const rx = new RegExp(
+          escapeRegex(search.trim()).replace(/\s+/g, ".*"),
+          "i"
+        );
+        filter.$or = [{ name: rx }, { email: rx }];
+      }
+
+      // fetch + sort
+      let emps = await userService.findUsers(filter);
+      if (!Array.isArray(emps)) emps = [];
+      const sortedEmps = emps.sort(
+        (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
       );
-    const sortedEmps = emps.sort(
-      (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
-    );
-    const employees = sortedEmps.map((o) => new UserDto(o));
-    res.json({
-      success: true,
-      message: `${
-        type.charAt(0).toUpperCase() + type.slice(1).replace(" ", "")
-      } List Found`,
-      data: employees,
-    });
+
+      const employees = sortedEmps.map((o) => new UserDto(o));
+
+      return res.json({
+        success: true,
+        message:
+          employees.length > 0 ? "Employees Found" : "No Employees Found",
+        data: employees,
+      });
+    } catch (err) {
+      return next(err);
+    }
   };
 
   getFreeEmployees = async (req, res, next) => {
