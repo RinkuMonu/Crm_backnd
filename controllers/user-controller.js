@@ -373,9 +373,16 @@ class UserController {
 
   getUsers = async (req, res, next) => {
     try {
-      const { status = "All", search = "" } = req.query;
-      const filter = { type: "employee" };
+      const { status = "All", search = "", type = "" } = req.query;
+      const filter = {};
 
+      // ---- type filter ----
+      const validTypes = ["admin", "employee", "leader"];
+      if (type && validTypes.includes(type.toLowerCase())) {
+        filter.type = type.toLowerCase();
+      }
+
+      // ---- status filter ----
       if (status && status !== "All") {
         const statusMap = {
           active: "active",
@@ -389,7 +396,7 @@ class UserController {
         }
       }
 
-      // search filter
+      // ---- search filter ----
       if (search && search.trim()) {
         const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         const rx = new RegExp(
@@ -399,20 +406,20 @@ class UserController {
         filter.$or = [{ name: rx }, { email: rx }];
       }
 
-      // fetch + sort
-      let emps = await userService.findUsers(filter);
-      if (!Array.isArray(emps)) emps = [];
-      const sortedEmps = emps.sort(
+      // ---- fetch + sort ----
+      let users = await userService.findUsers(filter);
+      if (!Array.isArray(users)) users = [];
+
+      const sorted = users.sort(
         (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
       );
 
-      const employees = sortedEmps.map((o) => new UserDto(o));
+      const finalData = sorted.map((o) => new UserDto(o));
 
       return res.json({
         success: true,
-        message:
-          employees.length > 0 ? "Employees Found" : "No Employees Found",
-        data: employees,
+        message: finalData.length > 0 ? "Users Found" : "No Users Found",
+        data: finalData,
       });
     } catch (err) {
       return next(err);
