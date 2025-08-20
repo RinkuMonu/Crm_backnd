@@ -427,15 +427,26 @@ class UserController {
   };
 
   getFreeEmployees = async (req, res, next) => {
-    const emps = await userService.findUsers({ type: "employee", team: null });
-    if (!emps || emps.length < 1)
-      return next(ErrorHandler.notFound(`No Free Employee Found`));
-    const employees = emps.map((o) => new UserDto(o));
-    res.json({
-      success: true,
-      message: "Free Employees List Found",
-      data: employees,
-    });
+    try {
+      const emps = await userService.findUsers({
+        type: "employee",
+        team: null,
+        status: { $ne: "banned" }, 
+      });
+
+      if (!emps || emps.length < 1) {
+        return next(ErrorHandler.notFound(`No Free Employee Found`));
+      }
+
+      const employees = emps.map((o) => new UserDto(o));
+      res.json({
+        success: true,
+        message: "Free Employees List Found",
+        data: employees,
+      });
+    } catch (err) {
+      return next(err);
+    }
   };
 
   getUser = async (req, res, next) => {
