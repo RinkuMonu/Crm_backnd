@@ -5,9 +5,21 @@ export const assignAsset = async (req, res) => {
   try {
     const { employeeId, assets } = req.body;
 
+    if (
+      !employeeId ||
+      !assets ||
+      !Array.isArray(assets) ||
+      assets.length === 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "employeeId and non-empty assets array are required",
+      });
+    }
+
     const updatedAssign = await AssignAssestModal.findOneAndUpdate(
       { employeeId },
-      { $set: { assets } },
+      { $push: { assets: { $each: assets } } }, // push new assets to existing array
       { new: true, upsert: true }
     );
 
