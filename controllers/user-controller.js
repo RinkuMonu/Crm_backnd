@@ -11,7 +11,7 @@ const { convert } = require("html-to-text");
 const UserModel = require("../models/user-model");
 const nodeMailer = require("nodemailer");
 const bcrypt = require("bcrypt");
-
+const axios = require("axios");
 const fs = require("fs");
 const puppeteer = require("puppeteer"); // Puppeteer to generate PDF from HTML
 
@@ -431,7 +431,7 @@ class UserController {
       const emps = await userService.findUsers({
         type: "employee",
         team: null,
-        status: { $ne: "banned" }, 
+        status: { $ne: "banned" },
       });
 
       if (!emps || emps.length < 1) {
@@ -787,6 +787,7 @@ class UserController {
       });
     }
   };
+
   approveInRequest = async (req, res, next) => {
     try {
       const { attendanceID, present, type } = req.body;
@@ -883,18 +884,31 @@ class UserController {
 
   applyLeaveApplication = async (req, res, next) => {
     try {
-      const data = req.body;
       const {
         applicantID,
-        title,
         type,
         startDate,
         endDate,
+        reason,
+        title,
         appliedDate,
         period,
-        reason,
-      } = data;
-      const newLeaveApplication = {
+      } = req.body;
+
+      if (!applicantID || !type || !startDate || !endDate) {
+        return next(
+          ErrorHandler.badRequest(
+            "applicantID, type, startDate, endDate required"
+          )
+        );
+      }
+
+      // 1) Applicant details
+      const applicant = await userService.findUserById(applicantID);
+      if (!applicant) return next(ErrorHandler.notFound("Applicant not found"));
+
+      // 2) Create leave record in DB
+      const newLeave = {
         applicantID,
         title,
         type,
@@ -906,25 +920,77 @@ class UserController {
         adminResponse: "Pending",
       };
 
-      const isLeaveApplied = await userService.findLeaveApplication({
-        applicantID,
-        startDate,
-        endDate,
-        appliedDate,
-      });
-      if (isLeaveApplied)
-        return next(ErrorHandler.notAllowed("Leave Already Applied"));
-
-      const resp = await userService.createLeaveApplication(
-        newLeaveApplication
-      );
+      const resp = await userService.createLeaveApplication(newLeave);
       if (!resp) return next(ErrorHandler.serverError("Failed to apply leave"));
 
-      res.json({ success: true, data: resp });
+      // 3) Subject banate hain
+      const subject = `Leave Application | ${applicant.name} | ${type}`;
+
+      // 4) Body (HTML format)
+      const hrEmail = process.env.HR_EMAIL || "hr@7unique.in";
+
+      const body = `
+         <div style="font-family:Arial, sans-serif; line-height:1.6; color:#333;">
+           <h2 style="margin-bottom:10px;">New Leave Application</h2>
+           <p><b>Employee Name:</b> ${applicant.name}</p>
+           <p><b>Employee Email:</b> ${applicant.email}</p>
+           ${title ? `<p><b>Title:</b> ${title}</p>` : ""}
+           <p><b>Leave Type:</b> ${type}</p>
+           ${period ? `<p><b>Period:</b> ${period}</p>` : ""}
+           <p><b>Leave Dates:</b> ${startDate} → ${endDate}</p>
+           ${appliedDate ? `<p><b>Applied On:</b> ${appliedDate}</p>` : ""}
+           <p><b>Reason:</b><br/> ${
+             reason ? reason.replace(/\n/g, "<br/>") : "-"
+           }</p>
+           <hr style="margin:20px 0;"/>
+           <p><b>To:</b> ${hrEmail}</p>
+           <p><b>CC:</b> deepak@7unique.in</p>
+           <p style="color:#666;">⚠ Replying to this email will reach the employee directly.</p>
+         </div>
+`;
+
+      // 5) PHP Mail API call
+      const phpApiUrl =
+        "https://cms.sevenunique.com/apis/mailWithoutAPI/send-mail.php"; // e.g. https://yourdomain.com/api/send-leave-email.php
+      const phpApiKey = "jibhfiugh84t3324fefei#*fef"; // same as PHP side
+
+      const payload = {
+        employeeName: applicant.name,
+        employeeEmail: applicant.email,
+        subject,
+        body,
+        toEmail: hrEmail, // HR ko bhejna
+        ccEmail: "deepak@7unique.in", // CC ke liye bhi bhejna
+      };
+
+      const { data } = await axios.post(phpApiUrl, payload, {
+        headers: {
+          "Content-Type": "application/json",
+          "X-API-Key": phpApiKey,
+        },
+        timeout: 10000,
+      });
+
+      if (!data?.success) {
+        return res.status(207).json({
+          success: true,
+          data: resp,
+          mail: { success: false, error: data?.error || "Mail API failed" },
+        });
+      }
+
+      // 6) Done
+      res.json({
+        success: true,
+        data: resp,
+        mail: { success: true },
+      });
     } catch (error) {
-      res.json({ success: false, error });
+      console.error("applyLeaveApplication error:", error?.message || error);
+      res.status(500).json({ success: false, message: error.message });
     }
   };
+
   applyAssest = async (req, res, next) => {
     try {
       const data = req.body;
