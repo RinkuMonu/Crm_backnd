@@ -114,7 +114,15 @@ const userSchema = new Schema(
     },
     branch: {
       type: String,
-      enum: ["sales", "tech", "hr", "telecaller", "Security-Department","management","account"],
+      enum: [
+        "sales",
+        "tech",
+        "hr",
+        "telecaller",
+        "Security-Department",
+        "management",
+        "account",
+      ],
       trim: true,
     },
     desgination: {
@@ -189,6 +197,9 @@ const userSchema = new Schema(
       type: String,
       trim: true,
     },
+    leaveBalance: { type: Number, default: 0 },
+    paidLeavesTaken: { type: Number, default: 0 },
+    unpaidLeavesTaken: { type: Number, default: 0 },
   },
   {
     timestamps: true,

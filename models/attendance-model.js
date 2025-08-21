@@ -14,7 +14,7 @@ const AttendanceSchema = new Schema({
 
   inApproved: { type: Boolean, default: false },
   outApproved: { type: Boolean, default: false },
-
+ 
   present: {
     type: String,
     enum: ["Present", "Half-day", "Absent"],

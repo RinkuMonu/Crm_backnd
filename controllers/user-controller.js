@@ -883,6 +883,7 @@ class UserController {
   };
 
   applyLeaveApplication = async (req, res, next) => {
+    // console.log("Auth header:", req.headers["authorization"]);
     try {
       const {
         applicantID,
@@ -905,6 +906,8 @@ class UserController {
 
       // 1) Applicant details
       const applicant = await userService.findUserById(applicantID);
+      // console.log("applicant", applicant);
+
       if (!applicant) return next(ErrorHandler.notFound("Applicant not found"));
 
       // 2) Create leave record in DB
@@ -952,7 +955,6 @@ class UserController {
       // 5) PHP Mail API call
       const phpApiUrl =
         "https://cms.sevenunique.com/apis/mailWithoutAPI/send-mail.php"; // e.g. https://yourdomain.com/api/send-leave-email.php
-      const phpApiKey = "jibhfiugh84t3324fefei#*fef"; // same as PHP side
 
       const payload = {
         employeeName: applicant.name,
@@ -962,31 +964,22 @@ class UserController {
         toEmail: hrEmail, // HR ko bhejna
         ccEmail: "deepak@7unique.in", // CC ke liye bhi bhejna
       };
+      console.log("Sending mail payload:", payload);
 
       const { data } = await axios.post(phpApiUrl, payload, {
         headers: {
           "Content-Type": "application/json",
-          "X-API-Key": phpApiKey,
+          Authorization: "Bearer jibhfiugh84t3324fefei#*fef",
         },
         timeout: 10000,
       });
-
-      if (!data?.success) {
-        return res.status(207).json({
-          success: true,
-          data: resp,
-          mail: { success: false, error: data?.error || "Mail API failed" },
-        });
-      }
-
-      // 6) Done
       res.json({
         success: true,
-        data: resp,
+        data: data,
         mail: { success: true },
       });
     } catch (error) {
-      console.error("applyLeaveApplication error:", error?.message || error);
+      console.error("applyLeaveApplication error:", error?.message);
       res.status(500).json({ success: false, message: error.message });
     }
   };
@@ -1083,14 +1076,146 @@ class UserController {
     try {
       const { id } = req.params;
       const body = req.body;
-      const isLeaveUpdated = await userService.updateLeaveApplication(id, body);
-      if (!isLeaveUpdated)
+
+      const leave = await userService.updateLeaveApplication(id, body);
+      if (!leave) {
         return next(ErrorHandler.serverError("Failed to update leave"));
+      }
+
+      const user = await userService.findUserById(leave.applicantID);
+      if (!user) {
+        return next(ErrorHandler.notFound("User not found"));
+      }
+
+      // HR Email
+      const hrEmail = process.env.HR_EMAIL || "hr@7unique.in";
+
+      // ================== APPROVED ==================
+      if (body.adminResponse === "Approved") {
+        if (user.leaveBalance > 0) {
+          await userService.updateUser(user._id, {
+            $inc: { leaveBalance: -1, paidLeavesTaken: 1 },
+          });
+        } else {
+          await userService.updateUser(user._id, {
+            $inc: { unpaidLeavesTaken: 1 },
+          });
+        }
+
+        // Subject
+        const subject = `Leave Application Approved | ${user.name}`;
+
+        // HTML Body
+        const bodyHtml = `
+        <div style="font-family:Arial, sans-serif; line-height:1.6; color:#333;">
+          <h2 style="margin-bottom:10px;">Leave Application Approved ✅</h2>
+          <p><b>Employee Name:</b> ${user.name}</p>
+          <p><b>Employee Email:</b> ${user.email}</p>
+          <p><b>Leave Type:</b> ${leave.type}</p>
+          <p><b>Period:</b> ${leave.period}</p>
+          <p><b>Leave Dates:</b> ${leave.startDate} → ${leave.endDate}</p>
+          <p><b>Status:</b> Approved</p>
+          <hr style="margin:20px 0;"/>
+          <p><b>To:</b> ${user.email}</p>
+          <p><b>CC:</b> ${hrEmail}</p>
+        </div>
+      `;
+
+        // PHP Mail API call
+        const phpApiUrl =
+          "https://cms.sevenunique.com/apis/mailWithoutAPI/send-mail.php";
+        const payload = {
+          employeeName: user.name,
+          employeeEmail: user.email,
+          subject,
+          body: bodyHtml,
+          toEmail: user.email, // Employee ko bhejna
+          ccEmail: hrEmail, // HR ko bhi bhejna
+        };
+
+        await axios.post(phpApiUrl, payload, {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer jibhfiugh84t3324fefei#*fef",
+          },
+          timeout: 10000,
+        });
+      }
+
+      // ================== REJECTED ==================
+      if (body.adminResponse === "Rejected") {
+        if (leave.adminResponse === "Approved") {
+          if (user.paidLeavesTaken > 0) {
+            await userService.updateUser(user._id, {
+              $inc: { leaveBalance: 1, paidLeavesTaken: -1 },
+            });
+          } else if (user.unpaidLeavesTaken > 0) {
+            await userService.updateUser(user._id, {
+              $inc: { unpaidLeavesTaken: -1 },
+            });
+          }
+        }
+
+        const subject = `Leave Application Rejected | ${user.name}`;
+
+        const bodyHtml = `
+        <div style="font-family:Arial, sans-serif; line-height:1.6; color:#333;">
+          <h2 style="margin-bottom:10px;">Leave Application Rejected ❌</h2>
+          <p><b>Employee Name:</b> ${user.name}</p>
+          <p><b>Employee Email:</b> ${user.email}</p>
+          <p><b>Leave Type:</b> ${leave.type}</p>
+          <p><b>Period:</b> ${leave.period}</p>
+          <p><b>Leave Dates:</b> ${leave.startDate} → ${leave.endDate}</p>
+          <p><b>Status:</b> Rejected</p>
+          <hr style="margin:20px 0;"/>
+          <p><b>To:</b> ${user.email}</p>
+          <p><b>CC:</b> ${hrEmail}</p>
+        </div>
+      `;
+
+        const phpApiUrl =
+          "https://cms.sevenunique.com/apis/mailWithoutAPI/send-mail.php";
+        const payload = {
+          employeeName: user.name,
+          employeeEmail: user.email,
+          subject,
+          body: bodyHtml,
+          toEmail: user.email, // Employee ko bhejna
+          ccEmail: hrEmail, // HR ko bhi bhejna
+        };
+
+        await axios.post(phpApiUrl, payload, {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer jibhfiugh84t3324fefei#*fef",
+          },
+          timeout: 10000,
+        });
+      }
+
       res.json({ success: true, message: "Leave Updated" });
     } catch (error) {
       res.json({ success: false, error });
     }
   };
+  leaveBalanceJob = () => {
+    cron.schedule("0 0 1 * *", async () => {
+      try {
+        const result = await UserModel.updateMany(
+          {},
+          { $set: { leaveBalance: 1 } }
+        );
+        console.log(
+          "Leave balance reset ho gaya:",
+          result.modifiedCount,
+          "users updated"
+        );
+      } catch (err) {
+        console.error("Leave balance reset error:", err);
+      }
+    });
+  };
+
   updateAssestApplication = async (req, res, next) => {
     try {
       const { id } = req.params;
