@@ -19,6 +19,7 @@ const path = require("path");
 const cron = require("node-cron");
 const moment = require("moment-timezone");
 const attendanceModel = require("../models/attendance-model");
+const { log } = require("console");
 
 // ---- Helpers (all in this file) ----
 const nowUtc = () => new Date(); // server UTC
@@ -883,6 +884,7 @@ class UserController {
   };
 
   applyLeaveApplication = async (req, res, next) => {
+    // console.log("Auth header:", req.headers["authorization"]);
     try {
       const {
         applicantID,
@@ -905,6 +907,8 @@ class UserController {
 
       // 1) Applicant details
       const applicant = await userService.findUserById(applicantID);
+      // console.log("applicant", applicant);
+
       if (!applicant) return next(ErrorHandler.notFound("Applicant not found"));
 
       // 2) Create leave record in DB
@@ -952,7 +956,6 @@ class UserController {
       // 5) PHP Mail API call
       const phpApiUrl =
         "https://cms.sevenunique.com/apis/mailWithoutAPI/send-mail.php"; // e.g. https://yourdomain.com/api/send-leave-email.php
-      const phpApiKey = "jibhfiugh84t3324fefei#*fef"; // same as PHP side
 
       const payload = {
         employeeName: applicant.name,
@@ -962,31 +965,22 @@ class UserController {
         toEmail: hrEmail, // HR ko bhejna
         ccEmail: "deepak@7unique.in", // CC ke liye bhi bhejna
       };
+      console.log("Sending mail payload:", payload);
 
       const { data } = await axios.post(phpApiUrl, payload, {
         headers: {
           "Content-Type": "application/json",
-          "X-API-Key": phpApiKey,
+          Authorization: "Bearer jibhfiugh84t3324fefei#*fef",
         },
         timeout: 10000,
       });
-
-      if (!data?.success) {
-        return res.status(207).json({
-          success: true,
-          data: resp,
-          mail: { success: false, error: data?.error || "Mail API failed" },
-        });
-      }
-
-      // 6) Done
       res.json({
         success: true,
-        data: resp,
+        data: data,
         mail: { success: true },
       });
     } catch (error) {
-      console.error("applyLeaveApplication error:", error?.message || error);
+      console.error("applyLeaveApplication error:", error?.message);
       res.status(500).json({ success: false, message: error.message });
     }
   };
@@ -1083,14 +1077,174 @@ class UserController {
     try {
       const { id } = req.params;
       const body = req.body;
-      const isLeaveUpdated = await userService.updateLeaveApplication(id, body);
-      if (!isLeaveUpdated)
+
+      // Leave application update
+      const leave = await userService.updateLeaveApplication(id, body);
+      if (!leave) {
         return next(ErrorHandler.serverError("Failed to update leave"));
+      }
+
+      // User find
+      const user = await userService.findUserById(leave.applicantID);
+      if (!user) {
+        return next(ErrorHandler.notFound("User not found"));
+      }
+
+      // HR Email
+      const hrEmail = process.env.HR_EMAIL || "hr@7unique.in";
+
+      // ============ APPROVED ============
+      if (body.adminResponse === "Approved") {
+        const totalDays = leave.period; // already stored hai period me
+        let paid = 0;
+        let unpaid = 0;
+
+        if (user.leaveBalance >= totalDays) {
+          paid = totalDays;
+        } else {
+          paid = user.leaveBalance;
+          unpaid = totalDays - user.leaveBalance;
+        }
+
+        // user update
+        await userService.updateUser(user._id, {
+          $inc: {
+            leaveBalance: -paid,
+            paidLeavesTaken: paid,
+            unpaidLeavesTaken: unpaid,
+          },
+        });
+
+        // Mail subject
+        const subject = `Leave Application Approved | ${user.name}`;
+
+        // Mail body
+        const bodyHtml = `
+        <div style="font-family:Arial, sans-serif; line-height:1.6; color:#333;">
+          <h2 style="margin-bottom:10px;">Leave Application Approved ✅</h2>
+          <p><b>Employee Name:</b> ${user.name}</p>
+          <p><b>Employee Email:</b> ${user.email}</p>
+          <p><b>Leave Type:</b> ${leave.type}</p>
+          <p><b>Period:</b> ${leave.period} Days 
+             (Paid: ${paid}, Unpaid: ${unpaid})</p>
+          <p><b>Leave Dates:</b> ${leave.startDate} → ${leave.endDate}</p>
+          <p><b>Status:</b> Approved</p>
+          <hr style="margin:20px 0;"/>
+          <p><b>To:</b> ${user.email}</p>
+          <p><b>CC:</b> ${hrEmail}</p>
+        </div>
+      `;
+
+        // Mail API call
+        const phpApiUrl =
+          "https://cms.sevenunique.com/apis/mailWithoutAPI/send-mail.php";
+        const payload = {
+          employeeName: user.name,
+          employeeEmail: user.email,
+          subject,
+          body: bodyHtml,
+          toEmail: user.email,
+          ccEmail: hrEmail,
+        };
+
+        await axios.post(phpApiUrl, payload, {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer jibhfiugh84t3324fefei#*fef",
+          },
+          timeout: 10000,
+        });
+      }
+
+      // ============ REJECTED ============
+      if (
+        body.adminResponse === "Rejected" &&
+        leave.adminResponse === "Approved"
+      ) {
+        const totalDays = leave.period;
+
+        // rollback calculation
+        let paidRollback = Math.min(user.paidLeavesTaken, totalDays);
+        let unpaidRollback = totalDays - paidRollback;
+
+        await userService.updateUser(user._id, {
+          $inc: {
+            leaveBalance: paidRollback,
+            paidLeavesTaken: -paidRollback,
+            unpaidLeavesTaken: -unpaidRollback,
+          },
+        });
+
+        const subject = `Leave Application Rejected | ${user.name}`;
+
+        const bodyHtml = `
+        <div style="font-family:Arial, sans-serif; line-height:1.6; color:#333;">
+          <h2 style="margin-bottom:10px;">Leave Application Rejected ❌</h2>
+          <p><b>Employee Name:</b> ${user.name}</p>
+          <p><b>Employee Email:</b> ${user.email}</p>
+          <p><b>Leave Type:</b> ${leave.type}</p>
+          <p><b>Period:</b> ${leave.period} Days</p>
+          <p><b>Leave Dates:</b> ${leave.startDate} → ${leave.endDate}</p>
+          <p><b>Status:</b> Rejected</p>
+          <hr style="margin:20px 0;"/>
+          <p><b>To:</b> ${user.email}</p>
+          <p><b>CC:</b> ${hrEmail}</p>
+        </div>
+      `;
+
+        const phpApiUrl =
+          "https://cms.sevenunique.com/apis/mailWithoutAPI/send-mail.php";
+        const payload = {
+          employeeName: user.name,
+          employeeEmail: user.email,
+          subject,
+          body: bodyHtml,
+          toEmail: user.email,
+          ccEmail: hrEmail,
+        };
+
+        await axios.post(phpApiUrl, payload, {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer jibhfiugh84t3324fefei#*fef",
+          },
+          timeout: 10000,
+        });
+      }
+
       res.json({ success: true, message: "Leave Updated" });
     } catch (error) {
       res.json({ success: false, error });
     }
   };
+
+  leaveBalanceJob = () => {
+    cron.schedule(
+      "0 0 1 * *",
+      async () => {
+        try {
+          const result = await UserModel.updateMany(
+            { leaveBalance: { $lt: 12 } },
+            {
+              $inc: { leaveBalance: 1 },
+              $set: { paidLeavesTaken: 0, unpaidLeavesTaken: 0 },
+            }
+          );
+          console.log(
+            "Leave balance increment ho gaya:",
+            result.modifiedCount,
+            "users updated"
+          );
+        } catch (err) {
+          console.error("Leave balance reset error: ", err);
+        }
+      },
+      {
+        timezone: "Asia/Kolkata",
+      }
+    );
+  };
+
   updateAssestApplication = async (req, res, next) => {
     try {
       const { id } = req.params;
@@ -1128,6 +1282,7 @@ class UserController {
       res.json({ success: false, error });
     }
   };
+
   assignletter = async (req, res, next) => {
     try {
       const data = req.body;
@@ -1205,6 +1360,7 @@ class UserController {
 
       // Find employee for email
       const employee = await UserModel.findById(data.employeeID);
+      console.log("Employee for email:", employee);
       if (!employee || !employee.email) {
         return next(ErrorHandler.serverError("Employee email not found"));
       }
@@ -1213,13 +1369,13 @@ class UserController {
       const transporter = nodeMailer.createTransport({
         service: "gmail",
         auth: {
-          user: "hr@7unique.in",
-          pass: "zfes rsbk pzwg ozxe", // 🔐 Consider using env variable in production
+          user: "niranjan@7unique.in",
+          pass: "kqwl chts evqr dctk", // 🔐 Consider using env variable in production
         },
       });
 
       const mailOptions = {
-        from: "hr@7unique.in",
+        from: "niranjan@7unique.in",
         to: employee.email,
         subject: `Your ${data.letterType} Letter`,
         text: `Dear ${employee.name},\n\nPlease find your ${data.letterType} letter attached.`,

@@ -9,7 +9,7 @@ router.post(
     console.log('[ROUTE] HIT /api/auth/login', new Date().toISOString(), 'url=', req.originalUrl);
     next();
   },
-  enforceGlobalIp,
+  // enforceGlobalIp,
   authController.login
 );// Login
 router.post('/forgot',authController.forgot);               // Forgot Password
