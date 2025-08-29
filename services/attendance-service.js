@@ -23,7 +23,7 @@ class AttendanceService {
       "2025-08-09": "Raksha Bandhan",
       "2025-08-15": "Independence Day",
       "2025-08-16": "Janmashtami",
-      "2025-08-28": "Ganesh Chaturthi",
+      "2025-08-27": "Ganesh Chaturthi",
       "2025-10-02": "Vijay Dashami",
       "2025-10-20": "Diwali",
       "2025-10-21": "Goverdhan Pooja",
