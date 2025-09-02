@@ -469,8 +469,8 @@ exports.salarySlip = async (req, res) => {
     const transporter = nodeMailer.createTransport({
       service: "gmail",
       auth: {
-        user: "hr@7unique.in",
-        pass: "zfes rsbk pzwg ozxe", // 🔐 Use process.env.EMAIL_PASS in real usage
+        user: "deepak@7unique.in",
+        pass: "yorf saih mbhg wngk", // 🔐 Use process.env.EMAIL_PASS in real usage
       },
     });
 
