@@ -260,12 +260,6 @@ class UserController {
         }
       }
 
-      // Hash password if provided
-      if (password) {
-        const salt = await bcrypt.genSalt(10);
-        password = await bcrypt.hash(password, salt);
-      }
-
       user = {
         name,
         email,
@@ -1369,13 +1363,13 @@ class UserController {
       const transporter = nodeMailer.createTransport({
         service: "gmail",
         auth: {
-          user: "niranjan@7unique.in",
-          pass: "kqwl chts evqr dctk", // 🔐 Consider using env variable in production
+          user: "deepak@7unique.in",
+          pass: "yorf saih mbhg wngk", // 🔐 Consider using env variable in production
         },
       });
 
       const mailOptions = {
-        from: "niranjan@7unique.in",
+        from: "hr@7unique.in",
         to: employee.email,
         subject: `Your ${data.letterType} Letter`,
         text: `Dear ${employee.name},\n\nPlease find your ${data.letterType} letter attached.`,
