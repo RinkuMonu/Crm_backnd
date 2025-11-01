@@ -10,6 +10,8 @@ const UserSalary = require("../models/user-salary");
 const Attendance = require("../models/attendance-model");
 const Leave = require("../models/leave-model");
 const nodeMailer = require("nodemailer");
+const userModel = require("../models/user-model");
+const { isHoliday } = require("../services/attendance-service");
 
 // exports.salarySlip = async (req, res) => {
 //     const { employeeID, month, year } = req.body;
@@ -322,7 +324,9 @@ exports.salarySlip = async (req, res) => {
       esiCompany: companyEsi,
       leaveDeduction,
       netSalary: netPay,
-      leaveBalance: leaveBalance.toFixed(2),
+      leaveBalance: user.leaveBalance,
+      paidLeavesTaken: user.paidLeavesTaken,
+      unpaidLeavesTaken: user.unpaidLeavesTaken,
       perDay: perDay.toFixed(2),
       totalSalary: grossSalary,
       totalDeductions: totalDeduction,
@@ -391,9 +395,18 @@ exports.salarySlip = async (req, res) => {
 
   <div class="section-title">Leave Balance</div>
   <table>
-    <tr><td><strong>Remaining Leave Balance</strong></td><td>₹${
-      data.leaveBalance
-    }</td></tr>
+    <tr>
+    <td><strong>Remaining Leave Balance</strong></td>
+    <td>${data.leaveBalance}</td>
+    </tr>
+    <tr>
+    <td><strong>Paid Leave Balance</strong></td>
+    <td>${data.paidLeavesTaken}</td>
+    </tr>
+    <tr>
+    <td><strong>Unpaid Leave Balance</strong></td>
+    <td>${data.unpaidLeavesTaken}</td>
+    </tr>
   </table>
 
   <div class="section-title">Earnings</div>
@@ -456,8 +469,8 @@ exports.salarySlip = async (req, res) => {
     const transporter = nodeMailer.createTransport({
       service: "gmail",
       auth: {
-        user: "hr@7unique.in",
-        pass: "zfes rsbk pzwg ozxe", // 🔐 Use process.env.EMAIL_PASS in real usage
+        user: "deepak@7unique.in",
+        pass: "yorf saih mbhg wngk", // 🔐 Use process.env.EMAIL_PASS in real usage
       },
     });
 
@@ -624,80 +637,210 @@ exports.getAttendanceReport = async (req, res) => {
   try {
     const { employeeId, month } = req.body;
 
-    // Parse year and month number
     const year = parseInt(moment(month, "YYYY-MM").format("YYYY"));
-    const monthNum = parseInt(moment(month, "YYYY-MM").format("M")); // Note: single 'M' to match DB format
+    const monthNum = parseInt(moment(month, "YYYY-MM").format("M"));
 
-    console.log("📌 Request for:", {
-      employeeId,
-      month,
-      year,
-      monthNum,
-    });
-
-    // Fetch attendance data
-    const attendanceQuery = {
-      employeeID: employeeId,
-      year,
-      month: monthNum,
-    };
-
+    const attendanceQuery = { employeeID: employeeId, year, month: monthNum };
     const attendanceData = await Attendance.find(attendanceQuery);
 
-    console.log("📘 Attendance Query:", attendanceQuery);
-    console.log("📘 Attendance Records Found:", attendanceData.length);
+    const userSalary = await UserSalary.findOne({ employeeID: employeeId });
+    const grossSalary = userSalary ? Number(userSalary.salary || 0) : 0;
 
-    const salaryQuery = {
-      employeeID: employeeId,
-    };
+    const daysInMonth = moment(
+      `${year}-${String(monthNum).padStart(2, "0")}`,
+      "YYYY-MM"
+    ).daysInMonth();
 
-    const userSalary = await UserSalary.findOne(salaryQuery);
+    const offSet = new Set();
+    const weeklyOffDates = [];
+    const holidayDates = [];
 
-    console.log("📗 Salary Query:", salaryQuery);
-    console.log("📗 User Salary Found:", userSalary);
+    for (let d = 1; d <= daysInMonth; d++) {
+      const jsDate = new Date(year, monthNum - 1, d);
+      const dateStr = moment(jsDate).format("YYYY-MM-DD");
 
-    const grossSalary = userSalary ? userSalary.salary : 0;
+      const hol = isHoliday(jsDate);
+      if (hol?.isHoliday) {
+        offSet.add(dateStr);
+        const nm = String(hol.name || "").toLowerCase();
+        if (nm.includes("weekend")) weeklyOffDates.push(dateStr);
+        else holidayDates.push(dateStr);
+      }
+    }
 
-    // Count attendance
+    const offDaysCount = offSet.size;
+
+    const recByDate = new Map();
+    for (const r of attendanceData) {
+      recByDate.set(Number(r.date), r);
+    }
+
     let presentDays = 0;
-    let absentDays = 0;
     let halfDays = 0;
-    let absentDates = [];
-    let halfDayDates = [];
-    let totalWorkingDays = attendanceData.length;
+    let absentCount = 0;
 
-    attendanceData.forEach((record) => {
-      const dateStr = `${year}-${String(monthNum).padStart(2, "0")}-${String(
-        record.date
-      ).padStart(2, "0")}`;
-      if (record.present === "Present") {
-        presentDays++;
-      } else if (record.present === "Absent") {
-        absentDays++;
+    const absentDates = [];
+    const halfDayDates = [];
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const jsDate = new Date(year, monthNum - 1, d);
+      const dateStr = moment(jsDate).format("YYYY-MM-DD");
+      if (offSet.has(dateStr)) continue;
+
+      const rec = recByDate.get(d);
+      if (!rec) {
+        // No record on a WORKING day => Absent
+        absentCount++;
         absentDates.push(dateStr);
-      } else if (record.present === "half-day") {
+        continue;
+      }
+
+      const status = String(rec.present || "").trim();
+
+      if (status === "Present") {
+        presentDays++;
+      } else if (status === "Half-day") {
         halfDays++;
         halfDayDates.push(dateStr);
+      } else if (status === "Absent") {
+        absentCount++;
+        absentDates.push(dateStr);
+      } else {
+        // Unknown => treat as absent on working day
+        absentCount++;
+        absentDates.push(dateStr);
       }
-    });
+    }
+
+    const WORKING_DAYS = daysInMonth - offDaysCount;
+
+    const dailyRate = WORKING_DAYS > 0 ? grossSalary / WORKING_DAYS : 0;
+
+    const effectiveAbsentDays = absentCount;
+
+    const totalDeductDays = effectiveAbsentDays + halfDays * 0.5;
+
+    const leaveDeduction = Math.round(dailyRate * totalDeductDays);
+    const earnedSalary = Math.max(0, Math.round(grossSalary - leaveDeduction));
+
+    // --------- Optional: user counters ----------
+    const user = await userModel
+      .findById(employeeId)
+      .select("leaveBalance paidLeavesTaken unpaidLeavesTaken");
 
     const response = {
       employeeId,
       month,
+      year,
+      // attendance
       presentDays,
-      absentDays,
       halfDays,
+      absentCount, // only on working days
+      effectiveAbsentDays, // for salary
+      totalWorkingDays: WORKING_DAYS,
+      daysInMonth,
+      // salary
       grossSalary,
-      totalWorkingDays,
+      dailyRate,
+      totalDeductDays, // absent + 0.5*half
+      leaveDeduction,
+      earnedSalary,
+      // dates (for debugging/UI)
       absentDates,
       halfDayDates,
+      weeklyOffDates,
+      holidayDates,
+      // user counters
+      leaveBalance: user?.leaveBalance ?? 0,
+      paidLeavesTaken: user?.paidLeavesTaken ?? 0,
+      unpaidLeavesTaken: user?.unpaidLeavesTaken ?? 0,
     };
 
-    console.log("📦 Final Response:", response);
-
-    res.status(200).json(response);
+    return res.status(200).json(response);
   } catch (error) {
-    console.error("   Error in getAttendanceReport:", error);
-    res.status(500).json({ error: "Internal server error" });
+    console.error("Error in getAttendanceReport:", error);
+    return res.status(500).json({ error: "Internal server error" });
   }
 };
+
+// exports.getAttendanceReport = async (req, res) => {
+//   try {
+//     const { employeeId, month } = req.body;
+
+//     // Parse year and month number
+//     const year = parseInt(moment(month, "YYYY-MM").format("YYYY"));
+//     const monthNum = parseInt(moment(month, "YYYY-MM").format("M")); // Note: single 'M' to match DB format
+
+//     console.log("📌 Request for:", {
+//       employeeId,
+//       month,
+//       year,
+//       monthNum,
+//     });
+
+//     // Fetch attendance data
+//     const attendanceQuery = {
+//       employeeID: employeeId,
+//       year,
+//       month: monthNum,
+//     };
+
+//     const attendanceData = await Attendance.find(attendanceQuery);
+
+//     console.log("📘 Attendance Query:", attendanceQuery);
+//     console.log("📘 Attendance Records Found:", attendanceData.length);
+
+//     const salaryQuery = {
+//       employeeID: employeeId,
+//     };
+
+//     const userSalary = await UserSalary.findOne(salaryQuery);
+
+//     console.log("📗 Salary Query:", salaryQuery);
+//     console.log("📗 User Salary Found:", userSalary);
+
+//     const grossSalary = userSalary ? userSalary.salary : 0;
+
+//     // Count attendance
+//     let presentDays = 0;
+//     let absentDays = 0;
+//     let halfDays = 0;
+//     let absentDates = [];
+//     let halfDayDates = [];
+//     let totalWorkingDays = attendanceData.length;
+
+//     attendanceData.forEach((record) => {
+//       const dateStr = `${year}-${String(monthNum).padStart(2, "0")}-${String(
+//         record.date
+//       ).padStart(2, "0")}`;
+//       if (record.present === "Present") {
+//         presentDays++;
+//       } else if (record.present === "Absent") {
+//         absentDays++;
+//         absentDates.push(dateStr);
+//       } else if (record.present === "half-day") {
+//         halfDays++;
+//         halfDayDates.push(dateStr);
+//       }
+//     });
+
+//     const response = {
+//       employeeId,
+//       month,
+//       presentDays,
+//       absentDays,
+//       halfDays,
+//       grossSalary,
+//       totalWorkingDays,
+//       absentDates,
+//       halfDayDates,
+//     };
+
+//     console.log("📦 Final Response:", response);
+
+//     res.status(200).json(response);
+//   } catch (error) {
+//     console.error("   Error in getAttendanceReport:", error);
+//     res.status(500).json({ error: "Internal server error" });
+//   }
+// };

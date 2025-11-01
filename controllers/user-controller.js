@@ -11,11 +11,24 @@ const { convert } = require("html-to-text");
 const UserModel = require("../models/user-model");
 const nodeMailer = require("nodemailer");
 const bcrypt = require("bcrypt");
-
+const axios = require("axios");
 const fs = require("fs");
 const puppeteer = require("puppeteer"); // Puppeteer to generate PDF from HTML
 
 const path = require("path");
+const cron = require("node-cron");
+const moment = require("moment-timezone");
+const attendanceModel = require("../models/attendance-model");
+const { log } = require("console");
+
+// ---- Helpers (all in this file) ----
+const nowUtc = () => new Date(); // server UTC
+const nowIst = () => moment(nowUtc()).tz("Asia/Kolkata");
+const ymdFromIst = (m) => ({
+  year: m.year(),
+  month: m.month() + 1,
+  date: m.date(),
+});
 
 class UserController {
   createUser = async (req, res, next) => {
@@ -50,6 +63,7 @@ class UserController {
       nominee_age,
       Un_no,
       Esi_no,
+      gender,
     } = req.body;
 
     const username = "user" + crypto.randomInt(11111111, 999999999);
@@ -59,6 +73,7 @@ class UserController {
       !email ||
       !mobile ||
       !password ||
+      !gender ||
       !type ||
       !status ||
       !current_address ||
@@ -109,6 +124,7 @@ class UserController {
       email,
       username,
       mobile,
+      gender,
       password,
       type,
       status,
@@ -161,7 +177,10 @@ class UserController {
   updateUser = async (req, res, next) => {
     const file = req.file;
     const filename = file && file.filename;
+    console.log("filename", filename);
+
     let user, id;
+    console.log("req.user.type", req);
 
     if (req.user.type === "admin") {
       const { id: userId } = req.params;
@@ -178,6 +197,7 @@ class UserController {
         ifsc,
         bank_name,
         desgination,
+        gender,
       } = req.body;
 
       type = type && type.toLowerCase();
@@ -198,14 +218,14 @@ class UserController {
           );
         }
 
-        const { adminPassword } = req.body;
-        if (!adminPassword) {
-          return next(
-            ErrorHandler.badRequest(
-              `Please Enter Your Password To Change The Type`
-            )
-          );
-        }
+        // const { adminPassword } = req.body;
+        // if (!adminPassword) {
+        //   return next(
+        //     ErrorHandler.badRequest(
+        //       `Please Enter Your Password To Change The Type`
+        //     )
+        //   );
+        // }
 
         const { password: hashPassword } = await userService.findUser({ _id });
         const isPasswordValid = await userService.verifyPassword(
@@ -240,17 +260,12 @@ class UserController {
         }
       }
 
-      // Hash password if provided
-      if (password) {
-        const salt = await bcrypt.genSalt(10);
-        password = await bcrypt.hash(password, salt);
-      }
-
       user = {
         name,
         email,
         status,
         username,
+        gender,
         mobile,
         password,
         type,
@@ -268,6 +283,7 @@ class UserController {
         name,
         username,
         address,
+        gender,
         mobile,
         account_number,
         ifsc,
@@ -279,6 +295,7 @@ class UserController {
         name,
         username,
         mobile,
+        gender,
         address,
         account_number,
         ifsc,
@@ -304,11 +321,16 @@ class UserController {
       const { id } = req.params;
 
       if (!mongoose.Types.ObjectId.isValid(id)) {
-        return res.status(400).json({ success: false, message: "Invalid user ID." });
+        return res
+          .status(400)
+          .json({ success: false, message: "Invalid user ID." });
       }
+      console.log(req.files);
 
       if (!req.files || Object.keys(req.files).length === 0) {
-        return res.status(400).json({ success: false, message: "No documents uploaded." });
+        return res
+          .status(400)
+          .json({ success: false, message: "No documents uploaded." });
       }
 
       const updateData = {};
@@ -325,7 +347,9 @@ class UserController {
       const updatedUser = await userService.updateUser(id, updateData);
 
       if (!updatedUser) {
-        return res.status(404).json({ success: false, message: "User not found." });
+        return res
+          .status(404)
+          .json({ success: false, message: "User not found." });
       }
 
       res.json({
@@ -342,40 +366,82 @@ class UserController {
     }
   };
 
-
-
   getUsers = async (req, res, next) => {
-    const type = req.path.split("/").pop().replace("s", "");
-    const emps = await userService.findUsers({ type });
-    if (!emps || emps.length < 1)
-      return next(
-        ErrorHandler.notFound(
-          `No ${type.charAt(0).toUpperCase() + type.slice(1).replace(" ", "")
-          } Found`
-        )
+    try {
+      const { status = "All", search = "", type = "" } = req.query;
+      const filter = {};
+
+      // ---- type filter ----
+      const validTypes = ["admin", "employee", "leader"];
+      if (type && validTypes.includes(type.toLowerCase())) {
+        filter.type = type.toLowerCase();
+      }
+
+      // ---- status filter ----
+      if (status && status !== "All") {
+        const statusMap = {
+          active: "active",
+          provison: "provision",
+          provision: "provision",
+          notice: "notice",
+          banned: "banned",
+        };
+        if (statusMap[status.toLowerCase()]) {
+          filter.status = statusMap[status.toLowerCase()];
+        }
+      }
+
+      // ---- search filter ----
+      if (search && search.trim()) {
+        const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const rx = new RegExp(
+          escapeRegex(search.trim()).replace(/\s+/g, ".*"),
+          "i"
+        );
+        filter.$or = [{ name: rx }, { email: rx }];
+      }
+
+      // ---- fetch + sort ----
+      let users = await userService.findUsers(filter);
+      if (!Array.isArray(users)) users = [];
+
+      const sorted = users.sort(
+        (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
       );
-    const sortedEmps = emps.sort(
-      (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
-    );
-    const employees = sortedEmps.map((o) => new UserDto(o));
-    res.json({
-      success: true,
-      message: `${type.charAt(0).toUpperCase() + type.slice(1).replace(" ", "")
-        } List Found`,
-      data: employees,
-    });
+
+      const finalData = sorted.map((o) => new UserDto(o));
+
+      return res.json({
+        success: true,
+        message: finalData.length > 0 ? "Users Found" : "No Users Found",
+        data: finalData,
+      });
+    } catch (err) {
+      return next(err);
+    }
   };
 
   getFreeEmployees = async (req, res, next) => {
-    const emps = await userService.findUsers({ type: "employee", team: null });
-    if (!emps || emps.length < 1)
-      return next(ErrorHandler.notFound(`No Free Employee Found`));
-    const employees = emps.map((o) => new UserDto(o));
-    res.json({
-      success: true,
-      message: "Free Employees List Found",
-      data: employees,
-    });
+    try {
+      const emps = await userService.findUsers({
+        type: "employee",
+        team: null,
+        status: { $ne: "banned" },
+      });
+
+      if (!emps || emps.length < 1) {
+        return next(ErrorHandler.notFound(`No Free Employee Found`));
+      }
+
+      const employees = emps.map((o) => new UserDto(o));
+      res.json({
+        success: true,
+        message: "Free Employees List Found",
+        data: employees,
+      });
+    } catch (err) {
+      return next(err);
+    }
   };
 
   getUser = async (req, res, next) => {
@@ -384,7 +450,8 @@ class UserController {
     if (!mongoose.Types.ObjectId.isValid(id))
       return next(
         ErrorHandler.badRequest(
-          `Invalid ${type.charAt(0).toUpperCase() + type.slice(1).replace(" ", "")
+          `Invalid ${
+            type.charAt(0).toUpperCase() + type.slice(1).replace(" ", "")
           } Id`
         )
       );
@@ -392,7 +459,8 @@ class UserController {
     if (!emp)
       return next(
         ErrorHandler.notFound(
-          `No ${type.charAt(0).toUpperCase() + type.slice(1).replace(" ", "")
+          `No ${
+            type.charAt(0).toUpperCase() + type.slice(1).replace(" ", "")
           } Found`
         )
       );
@@ -425,45 +493,55 @@ class UserController {
   };
 
   markInAttendance = async (req, res, next) => {
-    const days = [
-      "Sunday",
-      "Monday",
-      "Tuesday",
-      "Wednesday",
-      "Thursday",
-      "Friday",
-      "Saturday",
-    ];
     try {
-      const { employeeID, date } = req.body;
-      const now = new Date(date);
+      const { employeeID } = req.body; // ❗️ date ignore; sirf server time use
+      if (!employeeID)
+        return next(ErrorHandler.badRequest("employeeID required"));
 
-      const holidayCheck = attendanceService.isHoliday(now);
+      // 1) Server time (UTC) + IST components
+      const nowUtc = new Date();
+      const nowIst = moment(nowUtc).tz("Asia/Kolkata");
+
+      const days = [
+        "Sunday",
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+      ];
+
+      // 2) Holiday check IST date par
+      const istDateOnly = nowIst.clone().startOf("day").toDate(); // for holiday util if needed
+      const holidayCheck = attendanceService.isHoliday(istDateOnly);
       if (holidayCheck.isHoliday) {
         return next(
           ErrorHandler.notAllowed(`Today is a holiday: ${holidayCheck.name}`)
         );
       }
 
+      // 3) Attendance key (IST day-boundary)
       const attendanceData = {
         employeeID,
-        year: now.getFullYear(),
-        month: now.getMonth() + 1,
-        date: now.getDate(),
-        day: days[now.getDay()],
+        year: nowIst.year(),
+        month: nowIst.month() + 1, // 1-12
+        date: nowIst.date(), // 1-31
+        day: days[nowIst.day()],
       };
-      // return null;
 
+      // 4) Duplicate guard
       const existing = await attendanceService.findAttendance(attendanceData);
       if (existing && existing.inTime) {
         return next(ErrorHandler.notAllowed("IN time already marked."));
       }
 
+      // 5) Save: store UTC Date for inTime, but keys by IST
       const newAttendance = {
         ...attendanceData,
-        inTime: now,
+        inTime: nowUtc, // stored as Date (UTC)
         inApproved: false,
-        present: "Absent", // default until approved
+        present: "Absent",
       };
 
       const result = await attendanceService.markAttendance(newAttendance);
@@ -484,51 +562,121 @@ class UserController {
 
   markOutAttendance = async (req, res, next) => {
     try {
-      const { employeeID, date } = req.body;
-      const now = new Date(date);
+      const { employeeID } = req.body;
+      if (!employeeID)
+        return next(ErrorHandler.badRequest("employeeID required"));
 
-      const query = {
-        employeeID,
-        year: now.getFullYear(),
-        month: now.getMonth() + 1,
-        date: now.getDate(),
-      };
+      const ist = nowIst();
+      const { year, month, date } = ymdFromIst(ist);
 
-      const attendance = await attendanceService.findAttendance(query);
+      // Aaj (IST) ka record lao
+      const attendance =
+        (await attendanceService.findAttendance?.({
+          employeeID,
+          year,
+          month,
+          date,
+        })) ||
+        (await attendanceModel.findOne({ employeeID, year, month, date }));
 
       if (!attendance || !attendance.inTime) {
         return next(ErrorHandler.notAllowed("IN time not marked yet."));
       }
 
       const inTime = new Date(attendance.inTime);
-      const workedHours = (now - inTime) / (1000 * 60 * 60);
+      const workedHours = (nowUtc() - inTime) / (1000 * 60 * 60);
 
       if (workedHours < 8) {
         const remaining = 8 - workedHours;
         const h = Math.floor(remaining);
         const m = Math.round((remaining - h) * 60);
-
         return res.json({
           success: false,
           status: 300,
-          message: `You still have ${h}h ${m}m remaining. Do you want to regularize?`,
+          message: `Abhi ${h}h ${m}m baaki hai. Regularize karna chahoge?`,
           needRegularize: true,
         });
       }
 
-      attendance.outTime = now;
+      attendance.outTime = nowUtc(); // exact server time
       attendance.outApproved = true;
-      await attendance.save();
+      if (attendance.isModified) {
+        await attendance.save();
+      } else {
+        // If service pattern preferred
+        await attendance.save();
+      }
 
       res.json({
         success: true,
-        message: "OUT time marked successfully",
+        message: "OUT time marked",
         newAttendance: attendance,
       });
-    } catch (error) {
-      res.status(500).json({ success: false, message: error.message });
+    } catch (err) {
+      res.status(500).json({ success: false, message: err.message });
     }
   };
+
+  /**
+   * AUTO OUT: everyday 6:30 PM IST
+   * - outTime = 6:30 PM IST
+   * - outApproved = workedHours >= 8
+   * - needRegularize = true if < 8 (field optional)
+   */
+
+  startAutoOut630IST = () => {
+    // Har minute chalega; 6:30 IST pe hi fire karega (server TZ agnostic)
+    cron.schedule("* * * * *", async () => {
+      console.log("[autoOut] Checking for auto-out at 6:30 PM IST");
+
+      try {
+        const istNow = nowIst();
+        if (!(istNow.hour() === 18 && istNow.minute() === 30)) return;
+
+        // Aaj 18:30 IST ko UTC instant
+        const ist630 = istNow
+          .clone()
+          .hour(18)
+          .minute(30)
+          .second(0)
+          .millisecond(0);
+        const outUtc = new Date(ist630.toDate());
+        const { year, month, date } = ymdFromIst(ist630);
+
+        const filter = {
+          year,
+          month,
+          date,
+          outTime: null,
+          inTime: { $ne: null },
+        };
+        const pending =
+          (await attendanceModel.find?.(filter)) ||
+          (await attendanceService.findMany?.(filter)) ||
+          [];
+
+        for (const att of pending) {
+          const inTime = new Date(att.inTime);
+          const workedHours = (outUtc - inTime) / (1000 * 60 * 60);
+
+          att.outTime = outUtc;
+          att.outApproved = workedHours >= 8;
+
+          await att.save();
+        }
+
+        console.log(
+          `[autoOut] ${pending.length} employees auto-out @ 6:30 PM IST`
+        );
+      } catch (e) {
+        console.error("[autoOut] error:", e);
+      }
+    });
+  };
+
+  // ---- Example wiring (call once from server.js after DB ready) ----
+  // const { startAutoOut630IST } = require("./attendanceOut.controller+job");
+  // startAutoOut630IST();
 
   // 🔹 regularizeAttendanceRequest (OUT)
   regularizeAttendanceRequest = async (req, res, next) => {
@@ -634,6 +782,7 @@ class UserController {
       });
     }
   };
+
   approveInRequest = async (req, res, next) => {
     try {
       const { attendanceID, present, type } = req.body;
@@ -696,6 +845,7 @@ class UserController {
       if (date) filter.date = date;
 
       //   Proper Date Range Filter (based on year/month/date fields)
+
       if (fromDate && toDate) {
         const from = new Date(fromDate);
         const to = new Date(toDate);
@@ -711,6 +861,7 @@ class UserController {
       if (status && status !== "All") {
         filter.present = status;
       }
+      console.log(filter);
 
       const resp = await attendanceService.findAllAttendance(filter);
 
@@ -727,19 +878,35 @@ class UserController {
   };
 
   applyLeaveApplication = async (req, res, next) => {
+    // console.log("Auth header:", req.headers["authorization"]);
     try {
-      const data = req.body;
       const {
         applicantID,
-        title,
         type,
         startDate,
         endDate,
+        reason,
+        title,
         appliedDate,
         period,
-        reason,
-      } = data;
-      const newLeaveApplication = {
+      } = req.body;
+
+      if (!applicantID || !type || !startDate || !endDate) {
+        return next(
+          ErrorHandler.badRequest(
+            "applicantID, type, startDate, endDate required"
+          )
+        );
+      }
+
+      // 1) Applicant details
+      const applicant = await userService.findUserById(applicantID);
+      // console.log("applicant", applicant);
+
+      if (!applicant) return next(ErrorHandler.notFound("Applicant not found"));
+
+      // 2) Create leave record in DB
+      const newLeave = {
         applicantID,
         title,
         type,
@@ -751,25 +918,67 @@ class UserController {
         adminResponse: "Pending",
       };
 
-      const isLeaveApplied = await userService.findLeaveApplication({
-        applicantID,
-        startDate,
-        endDate,
-        appliedDate,
-      });
-      if (isLeaveApplied)
-        return next(ErrorHandler.notAllowed("Leave Already Applied"));
-
-      const resp = await userService.createLeaveApplication(
-        newLeaveApplication
-      );
+      const resp = await userService.createLeaveApplication(newLeave);
       if (!resp) return next(ErrorHandler.serverError("Failed to apply leave"));
 
-      res.json({ success: true, data: resp });
+      // 3) Subject banate hain
+      const subject = `Leave Application | ${applicant.name} | ${type}`;
+
+      // 4) Body (HTML format)
+      const hrEmail = process.env.HR_EMAIL || "hr@7unique.in";
+
+      const body = `
+         <div style="font-family:Arial, sans-serif; line-height:1.6; color:#333;">
+           <h2 style="margin-bottom:10px;">New Leave Application</h2>
+           <p><b>Employee Name:</b> ${applicant.name}</p>
+           <p><b>Employee Email:</b> ${applicant.email}</p>
+           ${title ? `<p><b>Title:</b> ${title}</p>` : ""}
+           <p><b>Leave Type:</b> ${type}</p>
+           ${period ? `<p><b>Period:</b> ${period}</p>` : ""}
+           <p><b>Leave Dates:</b> ${startDate} → ${endDate}</p>
+           ${appliedDate ? `<p><b>Applied On:</b> ${appliedDate}</p>` : ""}
+           <p><b>Reason:</b><br/> ${
+             reason ? reason.replace(/\n/g, "<br/>") : "-"
+           }</p>
+           <hr style="margin:20px 0;"/>
+           <p><b>To:</b> ${hrEmail}</p>
+           <p><b>CC:</b> deepak@7unique.in</p>
+           <p style="color:#666;">⚠ Replying to this email will reach the employee directly.</p>
+         </div>
+`;
+
+      // 5) PHP Mail API call
+      const phpApiUrl =
+        "https://cms.sevenunique.com/apis/mailWithoutAPI/send-mail.php"; // e.g. https://yourdomain.com/api/send-leave-email.php
+
+      const payload = {
+        employeeName: applicant.name,
+        employeeEmail: applicant.email,
+        subject,
+        body,
+        toEmail: hrEmail, // HR ko bhejna
+        ccEmail: "deepak@7unique.in", // CC ke liye bhi bhejna
+      };
+      console.log("Sending mail payload:", payload);
+
+      const { data } = await axios.post(phpApiUrl, payload, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer jibhfiugh84t3324fefei#*fef",
+        },
+        timeout: 10000,
+      });
+      res.json({
+        success: true,
+        data: data,
+        mail: { success: true },
+      });
     } catch (error) {
-      res.json({ success: false, error });
+      console.error("applyLeaveApplication error:", error?.message);
+      res.status(500).json({ success: false, message: error.message });
     }
   };
+
   applyAssest = async (req, res, next) => {
     try {
       const data = req.body;
@@ -862,14 +1071,174 @@ class UserController {
     try {
       const { id } = req.params;
       const body = req.body;
-      const isLeaveUpdated = await userService.updateLeaveApplication(id, body);
-      if (!isLeaveUpdated)
+
+      // Leave application update
+      const leave = await userService.updateLeaveApplication(id, body);
+      if (!leave) {
         return next(ErrorHandler.serverError("Failed to update leave"));
+      }
+
+      // User find
+      const user = await userService.findUserById(leave.applicantID);
+      if (!user) {
+        return next(ErrorHandler.notFound("User not found"));
+      }
+
+      // HR Email
+      const hrEmail = process.env.HR_EMAIL || "hr@7unique.in";
+
+      // ============ APPROVED ============
+      if (body.adminResponse === "Approved") {
+        const totalDays = leave.period; // already stored hai period me
+        let paid = 0;
+        let unpaid = 0;
+
+        if (user.leaveBalance >= totalDays) {
+          paid = totalDays;
+        } else {
+          paid = user.leaveBalance;
+          unpaid = totalDays - user.leaveBalance;
+        }
+
+        // user update
+        await userService.updateUser(user._id, {
+          $inc: {
+            leaveBalance: -paid,
+            paidLeavesTaken: paid,
+            unpaidLeavesTaken: unpaid,
+          },
+        });
+
+        // Mail subject
+        const subject = `Leave Application Approved | ${user.name}`;
+
+        // Mail body
+        const bodyHtml = `
+        <div style="font-family:Arial, sans-serif; line-height:1.6; color:#333;">
+          <h2 style="margin-bottom:10px;">Leave Application Approved ✅</h2>
+          <p><b>Employee Name:</b> ${user.name}</p>
+          <p><b>Employee Email:</b> ${user.email}</p>
+          <p><b>Leave Type:</b> ${leave.type}</p>
+          <p><b>Period:</b> ${leave.period} Days 
+             (Paid: ${paid}, Unpaid: ${unpaid})</p>
+          <p><b>Leave Dates:</b> ${leave.startDate} → ${leave.endDate}</p>
+          <p><b>Status:</b> Approved</p>
+          <hr style="margin:20px 0;"/>
+          <p><b>To:</b> ${user.email}</p>
+          <p><b>CC:</b> ${hrEmail}</p>
+        </div>
+      `;
+
+        // Mail API call
+        const phpApiUrl =
+          "https://cms.sevenunique.com/apis/mailWithoutAPI/send-mail.php";
+        const payload = {
+          employeeName: user.name,
+          employeeEmail: user.email,
+          subject,
+          body: bodyHtml,
+          toEmail: user.email,
+          ccEmail: hrEmail,
+        };
+
+        await axios.post(phpApiUrl, payload, {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer jibhfiugh84t3324fefei#*fef",
+          },
+          timeout: 10000,
+        });
+      }
+
+      // ============ REJECTED ============
+      if (
+        body.adminResponse === "Rejected" &&
+        leave.adminResponse === "Approved"
+      ) {
+        const totalDays = leave.period;
+
+        // rollback calculation
+        let paidRollback = Math.min(user.paidLeavesTaken, totalDays);
+        let unpaidRollback = totalDays - paidRollback;
+
+        await userService.updateUser(user._id, {
+          $inc: {
+            leaveBalance: paidRollback,
+            paidLeavesTaken: -paidRollback,
+            unpaidLeavesTaken: -unpaidRollback,
+          },
+        });
+
+        const subject = `Leave Application Rejected | ${user.name}`;
+
+        const bodyHtml = `
+        <div style="font-family:Arial, sans-serif; line-height:1.6; color:#333;">
+          <h2 style="margin-bottom:10px;">Leave Application Rejected ❌</h2>
+          <p><b>Employee Name:</b> ${user.name}</p>
+          <p><b>Employee Email:</b> ${user.email}</p>
+          <p><b>Leave Type:</b> ${leave.type}</p>
+          <p><b>Period:</b> ${leave.period} Days</p>
+          <p><b>Leave Dates:</b> ${leave.startDate} → ${leave.endDate}</p>
+          <p><b>Status:</b> Rejected</p>
+          <hr style="margin:20px 0;"/>
+          <p><b>To:</b> ${user.email}</p>
+          <p><b>CC:</b> ${hrEmail}</p>
+        </div>
+      `;
+
+        const phpApiUrl =
+          "https://cms.sevenunique.com/apis/mailWithoutAPI/send-mail.php";
+        const payload = {
+          employeeName: user.name,
+          employeeEmail: user.email,
+          subject,
+          body: bodyHtml,
+          toEmail: user.email,
+          ccEmail: hrEmail,
+        };
+
+        await axios.post(phpApiUrl, payload, {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer jibhfiugh84t3324fefei#*fef",
+          },
+          timeout: 10000,
+        });
+      }
+
       res.json({ success: true, message: "Leave Updated" });
     } catch (error) {
       res.json({ success: false, error });
     }
   };
+
+  leaveBalanceJob = () => {
+    cron.schedule(
+      "0 0 1 * *",
+      async () => {
+        try {
+          const result = await UserModel.updateMany(
+            { leaveBalance: { $lt: 12 } },
+            {
+              $inc: { leaveBalance: 1 },
+              $set: { paidLeavesTaken: 0, unpaidLeavesTaken: 0 },
+            }
+          );
+          console.log(
+            "Leave balance increment ho gaya:",
+            result.modifiedCount,
+            "users updated"
+          );
+        } catch (err) {
+          console.error("Leave balance reset error: ", err);
+        }
+      },
+      {
+        timezone: "Asia/Kolkata",
+      }
+    );
+  };
+
   updateAssestApplication = async (req, res, next) => {
     try {
       const { id } = req.params;
@@ -907,13 +1276,15 @@ class UserController {
       res.json({ success: false, error });
     }
   };
+
   assignletter = async (req, res, next) => {
     try {
       const data = req.body;
 
       const d = new Date();
-      data.assignedDate = `${d.getFullYear()}-${d.getMonth() + 1
-        }-${d.getDate()}`;
+      data.assignedDate = `${d.getFullYear()}-${
+        d.getMonth() + 1
+      }-${d.getDate()}`;
       const letterHTML = data.letterHTML;
 
       // Paths
@@ -983,6 +1354,7 @@ class UserController {
 
       // Find employee for email
       const employee = await UserModel.findById(data.employeeID);
+      console.log("Employee for email:", employee);
       if (!employee || !employee.email) {
         return next(ErrorHandler.serverError("Employee email not found"));
       }
@@ -991,8 +1363,8 @@ class UserController {
       const transporter = nodeMailer.createTransport({
         service: "gmail",
         auth: {
-          user: "hr@7unique.in",
-          pass: "zfes rsbk pzwg ozxe", // 🔐 Consider using env variable in production
+          user: "deepak@7unique.in",
+          pass: "yorf saih mbhg wngk", // 🔐 Consider using env variable in production
         },
       });
 

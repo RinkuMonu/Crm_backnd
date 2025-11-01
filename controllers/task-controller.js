@@ -21,8 +21,21 @@ exports.createTaskWithLeads = async (req, res, next) => {
       createdFor,
       assignedTo,
       createdBy,
+      leaderId, // agar employee hai to yeh frontend se aayegi
     } = req.body;
-    const assignedBy = createdBy;
+
+    const checkUser = await userService.findUser({ _id: createdBy });
+    let finalAssignedBy;
+    let finalAssignedTo;
+
+    if (checkUser.type === "admin") {
+      finalAssignedBy = createdBy; // admin ki id
+      finalAssignedTo = assignedTo; // selected employee
+    } else if (checkUser.type === "employee") {
+      // employee case
+      finalAssignedBy = assignedTo; // jo user select kiya, uski id (leader/manager)
+      finalAssignedTo = createdBy; // khud ki id (employee)
+    }
 
     // 1. Create Task
     const task = await Task.create({
@@ -30,21 +43,17 @@ exports.createTaskWithLeads = async (req, res, next) => {
       priority,
       description,
       team,
-      assignedTo,
+      assignedTo: finalAssignedTo,
       Status,
-      assignedBy,
+      assignedBy: finalAssignedBy,
     });
 
-    // 2. Check if the file is provided
+    // 2. Agar file hai to leads add karni hai
     if (req.file && req.file.buffer) {
-      // File is provided, proceed with reading Excel and creating leads
-
-      // Read Excel
       const workbook = xlsx.read(req.file.buffer, { type: "buffer" });
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
       const data = xlsx.utils.sheet_to_json(sheet);
 
-      // Prepare leads
       const allLeads = data.map((row) => ({
         name: row.NAME,
         Contact_No: String(row.CONTACT),
@@ -58,7 +67,7 @@ exports.createTaskWithLeads = async (req, res, next) => {
         taskID: task._id,
       }));
 
-      // Check duplicates by Contact_No
+      // Duplicate check
       const contactNos = allLeads.map((lead) => lead.Contact_No);
       const existingLeads = await Lead.find({
         Contact_No: { $in: contactNos },
@@ -68,6 +77,7 @@ exports.createTaskWithLeads = async (req, res, next) => {
       const existingContactsSet = new Set(
         existingLeads.map((lead) => lead.Contact_No)
       );
+
       const nonDuplicateLeads = allLeads.filter(
         (lead) => !existingContactsSet.has(lead.Contact_No)
       );
@@ -75,23 +85,22 @@ exports.createTaskWithLeads = async (req, res, next) => {
         existingContactsSet.has(lead.Contact_No)
       );
 
-      // Insert non-duplicates
       await Lead.insertMany(nonDuplicateLeads);
 
-      res.json({
+      return res.json({
         success: true,
         message: "Task created. Non-duplicate leads added.",
         task,
-        duplicateLeads, // Send duplicates back to frontend
-      });
-    } else {
-      // If no file is provided, just send success response without leads
-      res.json({
-        success: true,
-        message: "Task created. No file provided, so no leads added.",
-        task,
+        duplicateLeads,
       });
     }
+
+    // Agar file nahi hai
+    res.json({
+      success: true,
+      message: "Task created. No file provided, so no leads added.",
+      task,
+    });
   } catch (error) {
     console.error("   Error:", error);
     res.status(500).json({ success: false, error: error.message });
@@ -184,10 +193,12 @@ exports.getLeadsByTaskId = async (req, res) => {
   }
 
   try {
-    const leads = await Lead.find({ taskID: id }).populate("taskID").populate({
-      path: "taskID",
-      populate: { path: "assignedBy" }
-    });
+    const leads = await Lead.find({ taskID: id })
+      .populate("taskID")
+      .populate({
+        path: "taskID",
+        populate: { path: "assignedBy" },
+      });
     res.status(200).json(leads);
   } catch (error) {
     console.error("Error fetching leads by taskId:", error);
@@ -417,10 +428,7 @@ exports.getMyDeals = async (req, res) => {
     if (deals.length === 0) {
       console.warn("No deals found for this employee");
     } else {
-      console.log(
-        "Deals fetched successfully. First deal sample:",
-        deals[0]
-      );
+      console.log("Deals fetched successfully. First deal sample:", deals[0]);
     }
 
     res.json({ success: true, data: deals });
@@ -488,14 +496,26 @@ exports.getSalesLeaders = async (req, res) => {
 // for sales leader
 exports.getEmployee = async (req, res) => {
   try {
-    const { type } = req.query;
-    const salesLeaders = await User.find({
-      type: "employee",
-      branch: type == "employee" && { $in: ["tech", "telecaller"] },
-    }).select("_id name email");
-    res.status(200).json({ success: true, data: salesLeaders });
+    const { type } = req.query; // query param: employee ya leader
+
+    let filter = {};
+
+    if (type === "employee") {
+      filter = {
+        type: "employee",
+        branch: { $in: ["tech", "telecaller"] },
+      };
+    } else if (type === "leader") {
+      filter = { type: "leader" };
+    } else {
+      filter = {};
+    }
+
+    const users = await User.find(filter).select("_id name email type branch");
+
+    res.status(200).json({ success: true, data: users });
   } catch (error) {
-    console.error("Error fetching sales leaders:", error);
+    console.error("Error fetching users:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
