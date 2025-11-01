@@ -1,4 +1,4 @@
-name: Deploy Node.js Backend to CWP Server
+name: Deploy Node.js Backend to AWS EC2
 
 on:
   push:
@@ -11,61 +11,80 @@ jobs:
 
     steps:
       - name: 📥 Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: 🛠️ Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: 📦 Compress Backend Code (exclude storage, node_modules)
-        run: tar --exclude='./storage' --exclude='./node_modules' --exclude='.DS_Store' --exclude='./.git' -czvf backend.tar.gz . || true
+      # Bundle code WITHOUT node_modules, storage, .git
+      - name: 📦 Create backend.tar.gz
+        run: |
+          tar \
+            --exclude='./node_modules' \
+            --exclude='./storage' \
+            --exclude='./.git' \
+            --exclude='.DS_Store' \
+            -czvf backend.tar.gz .
 
-
-
-      - name: 🚀 Upload to Server via SCP
-        uses: appleboy/scp-action@master
+      - name: 🚚 Upload bundle to EC2
+        uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.BACKEND_SSH_HOST }}
           username: ${{ secrets.BACKEND_SSH_USERNAME }}
-          password: ${{ secrets.BACKEND_SSH_PASSWORD }}
+          key: ${{ secrets.BACKEND_SSH_KEY }}
           port: ${{ secrets.BACKEND_SSH_PORT }}
           source: "backend.tar.gz"
-          target: "/home/apiseven/"
+          target: "/home/api.sevenunique.com/"
 
-      - name: 🔐 SSH Deploy with .env Safety
-        uses: appleboy/ssh-action@master
+      - name: 🔐 Deploy on EC2 and Restart PM2
+        uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.BACKEND_SSH_HOST }}
           username: ${{ secrets.BACKEND_SSH_USERNAME }}
-          password: ${{ secrets.BACKEND_SSH_PASSWORD }}
+          key: ${{ secrets.BACKEND_SSH_KEY }}
           port: ${{ secrets.BACKEND_SSH_PORT }}
           script: |
-            echo "🔐 Backing up .env (if exists)"
-            cd /home/apiseven/public_html/Crm_Backnd
-            if [ -f .env ]; then
-              cp .env /home/apiseven/.env_backup
+            APP_DIR="/home/api.sevenunique.com/Crm_Backnd"
+            TAR_FILE="/home/api.sevenunique.com/backend.tar.gz"
+            OWNER_USER="finuniquerummy"
+            OWNER_GROUP="finuniquerummy"
+
+            echo "🔐 Backing up .env if present"
+            if [ -f "$APP_DIR/.env" ]; then
+              cp "$APP_DIR/.env" "/home/api.sevenunique.com/.env_backup"
             fi
 
-            echo "🛡️ Full code backup"
-            timestamp=$(date +%Y%m%d_%H%M%S)
-            mkdir -p /home/apiseven/backup_backend
-            cp -r . /home/apiseven/backup_backend/backup_$timestamp
+            echo "🛡️ Taking full code backup with timestamp"
+            TS=$(date +%Y%m%d_%H%M%S)
+            mkdir -p /home/api.sevenunique.com/backups
+            cp -r "$APP_DIR" "/home/api.sevenunique.com/backups/Crm_Backnd_$TS"
 
-            echo "📦 Extracting new backend.tar.gz"
-            tar -xzvf /home/apiseven/backend.tar.gz -C .
-            rm /home/apiseven/backend.tar.gz
+            echo "🧼 Preserve storage/, wipe rest of code"
+            mkdir -p "$APP_DIR/storage_tmp_keep"
+            cp -r "$APP_DIR/storage" "$APP_DIR/storage_tmp_keep" 2>/dev/null || true
+            rm -rf "$APP_DIR"/*
+            mv "$APP_DIR/storage_tmp_keep/storage" "$APP_DIR/storage" 2>/dev/null || true
+            rm -rf "$APP_DIR/storage_tmp_keep"
 
-            echo "♻️ Restoring .env (if backup exists)"
-            if [ -f /home/apiseven/.env_backup ]; then
-              cp /home/apiseven/.env_backup .env
-              rm /home/apiseven/.env_backup
+            echo "📦 Extracting new code"
+            tar -xzvf "$TAR_FILE" -C "$APP_DIR"
+            rm "$TAR_FILE"
+
+            echo "♻️ Restoring .env"
+            if [ -f "/home/api.sevenunique.com/.env_backup" ]; then
+              mv "/home/api.sevenunique.com/.env_backup" "$APP_DIR/.env"
             fi
 
-            echo "📦 Installing packages"
+            echo "👑 Fixing ownership"
+            chown -R $OWNER_USER:$OWNER_GROUP "$APP_DIR"
+
+            echo "📦 Installing dependencies in server"
+            cd "$APP_DIR"
             npm install --legacy-peer-deps
 
-            echo "🚀 Restarting Node app using PM2"
-            pm2 restart backend-app || pm2 start server.js --name backend-app
+            echo "🚀 Restarting PM2 service"
+            pm2 restart api.sevenunique.com || pm2 start server.js --name api.sevenunique.com
 
-            echo "✅ Deployment finished!"
+            echo "✅ Deployment complete"
