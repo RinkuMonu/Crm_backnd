@@ -18,15 +18,13 @@ jobs:
         with:
           node-version: '20'
 
-      # Bundle code WITHOUT node_modules, storage, .git
-      - name: 📦 Create backend.tar.gz
+      # Bundle code WITHOUT node_modules, storage, .git, .env
+      # Use only tracked files to avoid "file changed as we read it"
+      - name: 📦 Create backend.tar.gz (tracked files only)
         run: |
-          tar \
-            --exclude='./node_modules' \
-            --exclude='./storage' \
-            --exclude='./.git' \
-            --exclude='.DS_Store' \
-            -czvf backend.tar.gz .
+          git ls-files -z \
+            | grep -zvE '(^\.env$|^storage/|^node_modules/)' \
+            | tar --null -czvf backend.tar.gz -T -
 
       - name: 🚚 Upload bundle to EC2
         uses: appleboy/scp-action@v0.1.7
@@ -46,6 +44,7 @@ jobs:
           key: ${{ secrets.BACKEND_SSH_KEY }}
           port: ${{ secrets.BACKEND_SSH_PORT }}
           script: |
+            set -e
             APP_DIR="/home/api.sevenunique.com/Crm_Backnd"
             TAR_FILE="/home/api.sevenunique.com/backend.tar.gz"
             OWNER_USER="finuniquerummy"
@@ -82,7 +81,11 @@ jobs:
 
             echo "📦 Installing dependencies in server"
             cd "$APP_DIR"
-            npm install --legacy-peer-deps
+            if [ -f package-lock.json ]; then
+              npm ci --omit=dev
+            else
+              npm install --legacy-peer-deps
+            fi
 
             echo "🚀 Restarting PM2 service"
             pm2 restart api.sevenunique.com || pm2 start server.js --name api.sevenunique.com
