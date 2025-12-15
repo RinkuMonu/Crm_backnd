@@ -7,8 +7,11 @@ const eventUpload = require('../services/events-service');
 
 
 // Employee routes
+router.get('/export/my', (taskController.exportMyTasksExcel));
 router.post('/', upload.single("file"), taskController.createTaskWithLeads);
 router.get('/user/:id', (taskController.getUserNoFilter));
+
+
 router.put('/updatelead', taskController.updateLead);
 router.get('/user-today/:_id', taskController.getTodayTasks);
 router.get('/getlead/:id', taskController.getLeadsByTaskId);
