@@ -771,3 +771,60 @@ exports.getFilteredDeals = async (req, res) => {
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
+
+// export
+exports.exportMyTasksExcel = async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    const userId = req.user._id;
+
+    const tasks = await Task.find({
+      assignedTo: userId,
+      createdAt: {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate),
+      },
+    }).lean();
+
+    if (!tasks.length) {
+      return res.status(404).json({
+        success: false,
+        message: "No tasks found",
+      });
+    }
+
+    const rows = tasks.map((task) => ({
+      Title: task.title || "",
+      description: task.description || "",
+      Status: task.Status || "",
+      Created_At: task.createdAt || "",
+      remark: task.remark || "",
+    }));
+
+    const worksheet = xlsx.utils.json_to_sheet(rows);
+    const workbook = xlsx.utils.book_new();
+    xlsx.utils.book_append_sheet(workbook, worksheet, "Tasks");
+
+    // 🔥 IMPORTANT: write as BUFFER
+    const excelBuffer = xlsx.write(workbook, {
+      bookType: "xlsx",
+      type: "buffer",
+    });
+
+    // 🔥 IMPORTANT HEADERS
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=My_Tasks.xlsx"
+    );
+
+    return res.end(excelBuffer);
+  } catch (error) {
+    console.error("Excel Export Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
