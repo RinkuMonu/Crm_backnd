@@ -8,8 +8,8 @@ class aeronpay {
             const data = req.body
             console.log("aeronpay payload", data);
             const headersData = {
-                "client-id": req.headers.Client_ID,
-                "client-secret": req.headers.Client_Secret,
+                "client-id": req.headers.client_id,
+                "client-secret": req.headers.client_secret,
                 "Content-Type": "application/json"
             }
             const response = await axios.post("https://superprodapi.aeronpay.in/api/core-services/serviceapi-prod/finance/securepay/v2/payout/imps_payments", data,
