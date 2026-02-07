@@ -1,6 +1,39 @@
 const axios = require("axios");
 
 class aeronpay {
+
+    // transfer
+    transfer = async (req, res) => {
+        try {
+            const data = req.body
+            console.log("aeronpay payload", data);
+            const headersData = {
+                "client-id": req.headers.Client_ID,
+                "client-secret": req.headers.Client_Secret,
+                "Content-Type": "application/json"
+            }
+            const response = await axios.post("https://superprodapi.aeronpay.in/api/core-services/serviceapi-prod/finance/securepay/v2/payout/imps_payments", data,
+                {
+                    headers: headersData
+                }
+            )
+            return res.status(200).json({
+                status: true,
+                msg: "Transfer data forwarded successfully",
+                data: response.data,
+            });
+        } catch (error) {
+            console.log("aeronpay Transfer data forwarded error", error?.response?.data || error.message);
+            return res.status(500).json({
+                status: false,
+                msg: "Failed to process AeronPay Transfer data",
+                error: error?.response?.data || error.message,
+            });
+
+        }
+    }
+
+    // callback
     callBack = async (req, res) => {
         try {
             console.log("aeronpay callBack data", req.body);
