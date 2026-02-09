@@ -25,7 +25,7 @@ class aeronpay {
                 data: response.data,
             });
         } catch (error) {
-            console.log("aeronpay Transfer data forwarded error", error?.response?.data || error.message);
+            console.log("aeronpay Transfer data forwarded error", error);
             return res.status(500).json({
                 status: false,
                 msg: "Failed to process AeronPay Transfer data",
