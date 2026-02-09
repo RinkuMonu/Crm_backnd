@@ -12,6 +12,8 @@ class aeronpay {
                 "client-secret": req.headers.client_secret,
                 "Content-Type": "application/json"
             }
+            console.log("aeronpay headers", headersData);
+        
             const response = await axios.post("https://superprodapi.aeronpay.in/api/core-services/serviceapi-prod/finance/securepay/v2/payout/imps_payment", data,
                 {
                     headers: headersData
@@ -23,7 +25,7 @@ class aeronpay {
                 data: response.data,
             });
         } catch (error) {
-            console.log("aeronpay Transfer data forwarded error", error?.response?.data || error.message);
+            console.log("aeronpay Transfer data forwarded error", error);
             return res.status(500).json({
                 status: false,
                 msg: "Failed to process AeronPay Transfer data",
