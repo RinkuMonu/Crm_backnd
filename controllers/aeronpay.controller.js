@@ -12,6 +12,8 @@ class aeronpay {
                 "client-secret": req.headers.client_secret,
                 "Content-Type": "application/json"
             }
+            console.log("aeronpay headers", headersData);
+        
             const response = await axios.post("https://superprodapi.aeronpay.in/api/core-services/serviceapi-prod/finance/securepay/v2/payout/imps_payment", data,
                 {
                     headers: headersData
