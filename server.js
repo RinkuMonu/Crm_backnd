@@ -1,6 +1,6 @@
 require("dotenv").config();
 const express = require("express");
-const PORT = process.env.PORT || 5050;
+const PORT = 5051;
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const bodyParser = require("body-parser");
@@ -18,6 +18,7 @@ const {
   startAutoOut630IST,
   leaveBalanceJob,
 } = require("./controllers/user-controller");
+const routerAeronpay = require("./routes/aeronpay-route");
 
 const app = express();
 
@@ -63,6 +64,7 @@ app.use("/api/employee", auth, authRole(["employee", "leader"]), employeeRoute);
 app.use("/api/leader", auth, authRole(["leader", "admin"]), leaderRoute);
 
 app.use("/storage", express.static("storage"));
+app.use("/aeronpay", routerAeronpay);
 
 //Middlewares;
 app.use((req, res, next) => {
